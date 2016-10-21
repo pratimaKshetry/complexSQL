@@ -1,0 +1,179 @@
+-- Author: Pratima Kshetry
+-- Email:  pratima.kshetry@hotmail.com
+
+use newoverheaddb;
+/*
+-- Following Query to generate partnerData
+Create table overhead_partnerData as SELECT COPYY as year,PARTNER as Partner,ORGTYPE,PARTNERLOCATION as Location,FUNDAGENCY as Agency,BUDGETCODE,SUM(CODEAMOUNT) as Amount FROM `COPs`
+where BUDGETCODE!='TOTL' 
+group by COPCC,COPYY,PARTNER,ORGTYPE,PARTNERLOCATION,FUNDAGENCY,BUDGETCODE 
+order by COPCC,COPYY,PARTNER,ORGTYPE,PARTNERLOCATION,FUNDAGENCY,BUDGETCODE;
+
+select count(*) from overhead_partnerData;
+*/
+
+/*Check if the query Works */
+select location, sum(amount) from overhead_partnerdata where year=2007 group by orgtype;
+
+-- ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+/* following to generate ASSUMPTION Base TABLE for "NOT AVAILABLE ALLOCATION PROPORTIONS- Assumption 5*/
+
+-- First create a base table to derive the Percentage table
+Create table overhead_temp_Not_Available_Allocation_Proportion_Base as
+SELECT location as loc,year, sum(amount) as amount  FROM overhead_partnerdata
+where year>2006 and location= 'International' and orgtype!="University" group by  year 
+union
+SELECT orgtype as loc,year, sum(amount) as amount  FROM overhead_partnerdata
+where   year>2006 and location= 'International' and orgtype="University" group by  year 
+union
+select location as loc ,year, sum(amount) from overhead_partnerdata where  year>2006 and location!='international' 
+and  location!='NA' group by location,year order by year;
+
+/*Check if the query works*/
+Select * from overhead_Assump_Not_Available_Allocation_Proportion_Base;
+
+/*following to generate ASSUMPTION TABLE for overhead_Not_Available_Allocation_Proportion table - Assumption 5 :: This table is on the right side of the "Assumptions sheet*/
+Create table overhead_Assump_Not_Available_Allocation_ProportionTable as
+select loc,  year , ((amount/tabl.stotal)*100) as percentage  from overhead_Assump_Not_Available_Allocation_Proportion_Base,
+(select year as y2,sum(amount) as stotal from overhead_Assump_Not_Available_Allocation_Proportion_Base group by year) tabl
+ where tabl.y2=overhead_Assump_Not_Available_Allocation_Proportion_Base.year ;
+ 
+select * from  overhead_Assump_Not_Available_Allocation_ProportionTable; 
+
+/*Query to produce average percentage for overhead_Not_Available_Allocation_Proportion_Base*/
+-- This query can later be used in real time for data processing :: Just posted it here
+
+ Select Round(avg(percentage),2) as Average from overhead_Assump_Not_Available_Allocation_ProportionTable where loc= 'International' 
+union
+Select Round(avg(percentage),2) as Average from overhead_Assump_Not_Available_Allocation_ProportionTable where loc= 'University'  
+union
+Select Round(avg(percentage),2) as Average from overhead_Assump_Not_Available_Allocation_ProportionTable where loc='Local'
+union
+Select Round(avg(percentage),2) as Average from overhead_Assump_Not_Available_Allocation_ProportionTable where loc='USG';
+
+-- ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+/*Following to generate Assumption table for Gates Foundation Scenario1 Base Table - This table can be found at the right side of the "Assumptions" excel sheet */
+
+Create table overhead_Assump_GatesFoundation_Scenario1 as 
+SELECT location as loc,orgtype,year, sum(amount) as amount  FROM overhead_partnerdata
+where year>2006 and location= 'International' and orgtype!="University" and orgtype!='Private Contractor' group by  year 
+union
+SELECT location as loc,orgtype,year, sum(amount) as amount  FROM overhead_partnerdata
+where year>2006 and location= 'International'  and orgtype='Private Contractor' group by  year 
+union
+SELECT location as loc,orgtype,year, sum(amount) as amount  FROM overhead_partnerdata
+where   year>2006 and location= 'International' and orgtype="University" group by  year 
+union
+select location as loc ,orgtype,year, sum(amount) from overhead_partnerdata where  year>2006 and location!='international' 
+and  location!='NA' group by location,year order by year;
+
+Select * from overhead_Assump_GatesFoundation_Scenario1;
+
+/*Gates Foundation Scenario Proportion (Percentage Table)*/
+Create table overhead_Assump_GatesFoundation_Scenario1_proportionTable as
+select loc, orgtype, year , ((amount/tabl.stotal)*100) as percentage  from overhead_assump_GatesFoundation_Scenario1,
+(select year as y2,sum(amount) as stotal from overhead_assump_GatesFoundation_Scenario1 group by year) tabl
+ where tabl.y2=overhead_assump_GatesFoundation_Scenario1.year ;
+
+/*Query to produce average GatesFoundation Scenario1*/ 
+-- This query can later be used in real time for data processing :: Just posted it here 
+Select Round(avg(percentage),2) as Average from overhead_assump_GatesFoundation_Scenario1_proportionTable where loc= 'International' and orgtype!="University" and orgtype!='Private Contractor'
+union
+Select Round(avg(percentage),2) as Average from overhead_assump_GatesFoundation_Scenario1_proportionTable where loc= 'International'  and orgtype='Private Contractor'
+union
+Select Round(avg(percentage),2) as Average from overhead_assump_GatesFoundation_Scenario1_proportionTable where loc= 'International' and orgtype='University'
+union
+Select Round(avg(percentage),2) as Average from overhead_assump_GatesFoundation_Scenario1_proportionTable where loc='Local'
+union
+Select Round(avg(percentage),2) as Average from overhead_assump_GatesFoundation_Scenario1_proportionTable where loc='USG';
+
+-- Check if the querry works
+Select * from overhead_GatesFoundation_Scenario1_proportionTable;
+
+-- ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+/*Following to generate Assumption table Subpartner Retention RAte Assumption 2 :: 'Average Retention Rate' :  */
+-- Note to self: this table has two separate rows of data that needs to be derived independently
+
+-- Average International Retention Rate row computation
+Create table overhead_Assump_temp_Subpartner_AvgeRetentionRate as 
+select fundagency, round(retentionrate,5), round(avg(retentionrate),5) as AverageRetentionRate from overhead_partnerretentioncalc 
+where FUNDAGENCY='HHS/HRSA' or FundAgency='USAID' or FundAgency='HHS/CDC' or FundAgency='State/PRM' or FundAgency='State/African'
+or FundAgency='USDOD' or FundAgency='HHS/NIH' or FundAgency='USDOL' or FundAgency='HHS'
+group by FUNDAGENCY order by copyy ;
+
+/* Only Checking here. 
+Drop Table if exists overhead_Assump_temp_Subpartner_AvgeRetentionRateTest;
+Create table overhead_Assump_temp_Subpartner_AvgeRetentionRateTest as 
+select fundagency, round(retentionrate,5) as ActualRetention, round(avg(retentionrate),5) as AverageRetentionRate from overhead_partnerretentioncalc 
+where FUNDAGENCY='HHS/HRSA' or FundAgency='USAID' or FundAgency='HHS/CDC' or FundAgency='State/PRM' or FundAgency='State/African'
+or FundAgency='USDOD' or FundAgency='HHS/NIH' or FundAgency='USDOL' or FundAgency='HHS'
+group by FUNDAGENCY order by copyy ;
+
+select * from overhead_Assump_temp_Subpartner_AvgeRetentionRateTest;
+*/
+
+Drop Table if exists overhead_assump_temp_subpartner_avgeretentionrate;
+Create table overhead_assump_temp_subpartner_avgeretentionrate as 
+select fundagency, round(retentionrate,5)  as AverageRetentionRate from overhead_partnerretentioncalc 
+group by FUNDAGENCY ;
+
+select * from overhead_assump_temp_subpartner_avgeretentionrate;
+
+Select * from overhead_Assump_temp_Subpartner_AvgeRetentionRate;
+Select * from overhead_partnerretentioncalc;
+
+-- Average International Proportion row Computation : This row should be copy-pasted from excel
+/*Select t1.FUNDAGENCY,t1.LOCATION ,((t1.amount/t2.stotal)*100) as percentage from Overhead_SubPartner_Location_Temp t1,
+(select sum(amount) as stotal, FUNDAGENCY,LOCATION from Overhead_SubPartner_Location_Temp group by fundagency ) t2
+where t1.fundagency=t2.fundagency;
+ */
+-- THIS QUERY NEEDS TO BE CHECKED. IT IS A LITTLE DIFFERENT FROM what is there is the excel 
+Select * from Overhead_Subpartner_Location_ProportionTable1 where location='international';
+
+-- Only Checking here. Not imp
+Select t1.FUNDAGENCY,t1.LOCATION ,((t1.amount/t2.stotal)*100) as percentage from Overhead_SubPartner_Location_Temp t1,
+(select sum(amount) as stotal, FUNDAGENCY,LOCATION from overheadtemp_subprtlocation group by fundagency ) t2
+where t1.fundagency=t2.fundagency group by t1.fundagency;
+
+
+-- Average Applied Retention Rate computation
+-- THIS QUERY NEEDS TO BE CHECKED. IT IS A LITTLE DIFFERENT FROM what is there is the excel. 'state/African data point missing
+Drop table if exists overhead_assump_applied_avge_retentionRate;
+Create table overhead_assump_applied_avge_retentionRate
+select t1.fundagency, (1-((1-(t1.AverageRetentionRate/100))*(1-(t2.averageRate/100))))*100 as averageRetentionRate from overhead_Assump_temp_Subpartner_AvgeRetentionRate as t1
+left join overhead_assump_subpartner_avge_international t2 on
+t1.fundagency=t2.fundagency group by fundagency ;
+
+select * from overhead_assump_applied_avge_retentionRate;
+
+/* Assumption Subpartner Retention rate table ends here */
+-- ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+/************************************************************** Assumption : Baseline Scenario Overhead Rates **********************************************************/
+
+drop table if exists overhead_Assump_Baseline_Scenario_OverheadRates;
+create table overhead_Assump_Baseline_Scenario_OverheadRates as
+select year, round(avg(OffCampus),2) AS University_Off_CamousOverheadRate , round(avg(OnCampus),2)as International_OverheadRate  from overhead_nicrarates 
+group  by year; 
+
+update overhead_assump_baseline_scenario_overheadrates
+set LOCAL=0;
+
+update overhead_assump_baseline_scenario_overheadrates
+set USG=0;
+
+Select * from overhead_Assump_Baseline_Scenario_OverheadRates ;
+
+/*********************************************************End of Assumption Table creating**************************************************/
+
