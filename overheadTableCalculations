@@ -1,0 +1,1566 @@
+-- Author: Pratima Kshetry
+-- Email:  pratima.kshetry@hotmail.com
+
+-- The queries in this file can be used to perform compex calculations within the database.
+
+use newoverheaddb;
+
+/****************************************************************ORG TYPE***************************************************************************************** */
+/*Orgtype table that will later be used to classify organization type of partners as uni,ngo etc. The partner receiving max funding as 'ABC' org type will be classified as "ABC" org type using the following code*/
+drop table  if exists temp;
+create table temp as
+SELECT copyy, PARTNER,ORGTYPE,(SUM(CODEAMOUNT)) as TotalAmount,partnerlocation FROM `COPs` WHERE BUDGETCODE="TOTL" group by PARTNER,ORGTYPE ORDER BY orgtype ASC, SUM(CODEAMOUNT);
+
+select * from temp order by PARTNER;
+## Now classify partners as the specific org type for which it receives max funding 
+drop table if exists overhead_orgtype;
+create table overhead_orgtype as
+SELECT  a.partner,  a.orgtype
+FROM temp a
+LEFT JOIN temp b ON a.partner = b.partner AND a.totalamount<b.totalamount  WHERE b.partner IS NULL order by a.partner asc;
+
+select * from overhead_orgtype;
+
+
+/*******************************************OrgType Table code ends here******************************************************/
+-- --------------------------------------------------------------------------------------------------------------------------------------------------------
+-- ---------------------------------------------------------------------------------------------------------------------------------------------------------
+
+/*********************************** SQL codes to produce SubpartnerTotal Table begins from here ****************************************/
+Create Table Overhead_SubpartnerTotal as SELECT PARTNER,COPYY,SUM(AMOUNT) AS SUBPARTNERTOTAL,FUNDAGENCY FROM `SubPartners` where COPYY BETWEEN 2007 and 2009 and AMOUNT>0 group by PARTNER,COPYY,FUNDAGENCY order by PARTNER,COPYY,FUNDAGENCY;
+select * from overhead_subpartnertotal;
+
+/*SubpartnerTotal Table code ends here*/
+-- --------------------------------------------------------------------------------------------------------------------------------------------------------
+-- ---------------------------------------------------------------------------------------------------------------------------------------------------------
+-- ---------------------------------------------------------------------------------------------------------------------------------------------------------
+
+/***********************************************************************SQL codes to produce PartnerTotal table*******************************/
+Drop table if  exists Overhead_PartnerTotal;
+Create Table Overhead_PartnerTotal as SELECT PARTNER,COPYY,FUNDAGENCY,SUM(CODEAMOUNT) as PARTNERTOTAL FROM `COPs` WHERE COPYY BETWEEN 2007 and 2008 and budgetcode="TOTL" and CODEAMOUNT>0 group by PARTNER,COPYY,FUNDAGENCY order by PARTNER,COPYY,FUNDAGENCY;
+ 
+select t1.PARTNER,t1.COPYY, t1.FUNDAGENCY, t1.PARTNERTOTAL, t2.SUBPARTNERTOTAL , ((t1.PARTNERTOTAL- t2.SUBPARTNERTOTAL)/t1.PARTNERTOTAL)*100 as RETENTIONRATE 
+from overhead_partnertotal as t1 LEFT JOIN overhead_subpartnertotal as t2 ON  t1.PARTNER=t2.PARTNER and t1.COPYY=t2.COPYY and t1.FUNDAGENCY=t2.FUNDAGENCY;
+
+-- create Table Overhead_PartnerRetentionCalc1 as select t1.PARTNER,t1.COPYY, t1.FUNDAGENCY, t1.PARTNERTOTAL, t2.SUBPARTNERTOTAL , ((t1.PARTNERTOTAL- t2.SUBPARTNERTOTAL)/t1.PARTNERTOTAL)*100 as RETENTIONRATE from overhead_partnertotal 
+-- as t1 LEFT JOIN overhead_subpartnertotal as t2 ON 
+-- t1.PARTNER=t2.PARTNER and t1.COPYY=t2.COPYY and t1.FUNDAGENCY=t2.FUNDAGENCY;
+
+
+-- select t1.PARTNER,t1.COPYY, t1.FUNDAGENCY, t1.PARTNERTOTAL, IFNULL(t2.SUBPARTNERTOTAL,0) as SUBPARTNERTOTAL1 , ((t1.PARTNERTOTAL- IFNULL(t2.SUBPARTNERTOTAL,0))/NULLIF(t1.PARTNERTOTAL,0))*100 as RETENTIONRATE from overhead_partnertotal as t1 LEFT JOIN overhead_subpartnertotal as t2 ON 
+-- t1.PARTNER=t2.PARTNER and t1.COPYY=t2.COPYY and t1.FUNDAGENCY=t2.FUNDAGENCY;
+
+/*Create Table Overhead_PartnerRetentionCalc as select t1.PARTNER,t1.COPYY, t1.FUNDAGENCY, t1.PARTNERTOTAL, IFNULL(t2.SUBPARTNERTOTAL,0) as SUBPARTNERTOTAL1 , 
+-- ((t1.PARTNERTOTAL- IFNULL(t2.SUBPARTNERTOTAL,0))/NULLIF(t1.PARTNERTOTAL,0))*100 as RETENTIONRATE
+ from overhead_partnertotal as t1 LEFT JOIN overhead_subpartnertotal as t2 ON 
+t1.PARTNER=t2.PARTNER and t1.COPYY=t2.COPYY and t1.FUNDAGENCY=t2.FUNDAGENCY; */
+
+/*select * from Overhead_PartnerRetentionCalc;*/
+-- --------------------------------------------------------------------------------------------------------------------------------------------------------
+-- ---------------------------------------------------------------------------------------------------------------------------------------------------------
+-- ---------------------------------------------------------------------------------------------------------------------------------------------------------
+
+/******************************************************** Query to Produce the PartnerRetention Calc****************************************************/
+drop table if exists Overhead_PartnerRetentionCalc;
+Create Table Overhead_PartnerRetentionCalc as select t1.PARTNER,t1.COPYY, t1.FUNDAGENCY, t1.PARTNERTOTAL, IFNULL(t2.SUBPARTNERTOTAL,0) as SUBPARTNERTOTAL1 , 
+IFNULL(((t1.PARTNERTOTAL- IFNULL(t2.SUBPARTNERTOTAL,0))/NULLIF(t1.PARTNERTOTAL,0))*100,0) as RETENTIONRATE
+ from overhead_partnertotal as t1 LEFT JOIN overhead_subpartnertotal as t2 ON 
+t1.PARTNER=t2.PARTNER and t1.COPYY=t2.COPYY and t1.FUNDAGENCY=t2.FUNDAGENCY;
+
+select * from Overhead_PartnerRetentionCalc;
+
+-- check 
+select t1.PARTNER,t1.COPYY, t1.FUNDAGENCY, t1.PARTNERTOTAL, IFNULL(t2.SUBPARTNERTOTAL,0) as SUBPARTNERTOTAL1 , 
+IFNULL(((t1.PARTNERTOTAL- IFNULL(t2.SUBPARTNERTOTAL,0))/NULLIF(t1.PARTNERTOTAL,0))*100,0) as RETENTIONRATE
+ from overhead_partnertotal as t1 LEFT JOIN overhead_subpartnertotal as t2 ON 
+t1.PARTNER=t2.PARTNER and t1.COPYY=t2.COPYY and t1.FUNDAGENCY=t2.FUNDAGENCY;
+
+
+drop table if exists Overhead_PartnerRetentionCalc_AvgeRetentionRate ;
+Create table Overhead_PartnerRetentionCalc_AvgeRetentionRate as
+select  partner, fundagency, partnertotal, retentionrate, avg(RETENTIONRATE) as average from Overhead_PartnerRetentionCalc group by fundagency; 
+
+Select * from Overhead_PartnerRetentionCalc_AvgeRetentionRate;
+
+/*************************************************************SQL codes to product Partner Retention Calcs ends here ***************************************************************/
+-- ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+/********************************************************** SQL CODES to produce the new Crosscuts table begins here**************************************************************/
+Drop table if exists Overhead_CrossCuts_temp;
+Create table Overhead_CrossCuts_temp as SELECT COPCC as Country,COPYY as Year, partnerlocation, PARTNER as Partner,CATEGORY as Category,SUM(CODEAMOUNT) as Amount,FUNDAGENCY as FundAgency FROM `CrossCut` 
+WHERE  category like "%Construction%" or category ="Renovation" or category ="Motor Vehicles: Purchased"  group by COPCC,COPYY,PARTNER,CATEGORY,FUNDAGENCY 
+order by COPCC,COPYY,PARTNER,CATEGORY,FUNDAGENCY;
+
+Select * from Overhead_CrossCuts_temp;
+
+drop table if exists overhead_crosscuts;
+create table overhead_crosscuts as
+SELECT Year, Partner,partnerlocation,  FundAgency, sum(amount) as TotalAmount  FROM Overhead_CrossCuts_temp where PARTNERLOCATION="international" 
+group by partner, Year,fundagency;
+
+select * from overhead_crosscuts;
+/********************************************************** SQL CODES to produce the new Crosscuts table ends here******************************************************************/
+-- ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+/********************************************************** SQL CODES to produce the new SubPartner Location table begins here**************************************************************/
+Drop table if exists Overhead_SubpartnerLocation;
+Create table Overhead_SubpartnerLocation as SELECT SUBPARTNER,COUNT(SUBPARTNER),COPYY,SUM(AMOUNT) as Amount,SUBPARTNERLOCATION as Location,FUNDAGENCY FROM `SubPartners` 
+where COPYY BETWEEN 2007 and 2009 
+group by SUBPARTNER,COPYY,SUBPARTNERLOCATION,FUNDAGENCY 
+order by COPYY,SUBPARTNER,COUNT(SUBPARTNER) desc;
+
+Select * from Overhead_SubpartnerLocation;
+
+-- SQL code to produce the mini Subpartner :: This table can be found on the right side of the "Sub Partner Location table"
+-- Note: This table on the right side has two separate tables that needs to be produced independently
+Drop table if exists Overhead_SubPartner_Location_Temp;
+Create table Overhead_SubPartner_Location_Temp as 
+Select t1.FUNDAGENCY,t1.LOCATION ,t1.amt as AMOUNT from
+(SELECT  COPYY,FUNDAGENCY,LOCATION,SUM(AMOUNT) as amt FROM overhead_subpartnerlocation WHERE COPYY=2007 GROUP BY fundagency, LOCATION)t1;
+
+Select * from Overhead_SubPartner_Location_Temp;
+
+/* The following code is not needed as no such table is required */
+-- Query to Create Subpartner-Location PROPORTION table by location
+drop table if exists Overhead_Subpartner_Location_ProportionTable1;
+Create table Overhead_Subpartner_Location_ProportionTable1 as 
+Select t1.FUNDAGENCY,t1.LOCATION ,((t1.amount/t2.stotal)*100) as percentage from Overhead_SubPartner_Location_Temp t1,
+(select sum(amount) as stotal, FUNDAGENCY,LOCATION from Overhead_SubPartner_Location_Temp group by fundagency ) t2
+ where t1.fundagency=t2.fundagency;
+ 
+
+-- Check if the above query works
+Select * from Overhead_Subpartner_Location_ProportionTable1 group by FUNDAGENCY;
+
+-- Note to Self: Few data do not match the Subpartner Location mini table
+/********************************************************** SQL CODES to produce the new SubPartner Location table ends here******************************************************************/
+-- ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+/********************************************************** SQL CODES to produce the new PartnerData table begins here**************************************************************/
+drop table if exists overhead_partnerData;
+Create table overhead_partnerData as SELECT COPYY as year,PARTNER as Partner,ORGTYPE,PARTNERLOCATION as Location,FUNDAGENCY as Agency,BUDGETCODE,SUM(CODEAMOUNT) as Amount FROM `COPs`
+where BUDGETCODE!='TOTL' 
+group by COPCC,COPYY,PARTNER,ORGTYPE,PARTNERLOCATION,FUNDAGENCY,BUDGETCODE 
+order by COPCC,COPYY,PARTNER,ORGTYPE,PARTNERLOCATION,FUNDAGENCY,BUDGETCODE;
+
+-- Code to create mini table that is there in the Partner data sheet of the Overhead excel worksbook
+Create table overhead_partnerdata_mini as 
+select year, sum(amount), PARTNER from overhead_partnerData where partner="Not Available" and Agency="Redacted" and year>2006 group by year;
+
+/********************************************************** SQL CODES to produce the new PartnerData table ends here******************************************************************/
+
+-- ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+/********************************************************** SQL CODES to produce the USDOL table begins here******************************************************/
+drop table if exists overhead_USDOL;
+create table overhead_USDOL as
+select overhead_partnerdata.year,overhead_partnerdata.partner,overhead_partnerdata.location,overhead_partnerdata.agency,overhead_orgtype.orgtype, sum(overhead_partnerdata.amount) as Amount from overhead_partnerdata  left join overhead_orgtype 
+on overhead_partnerdata.partner=overhead_orgtype.partner and overhead_partnerdata.orgtype=overhead_orgtype.orgtype where overhead_partnerdata.agency="USDOL" and overhead_partnerdata.location="International" group by partner, year;
+
+select * from overhead_USDOL;
+
+-- check
+/*
+select t1.year,t1.partner,t1.location,t1.agency,t2.orgtype, sum(t1.amount) as Amount from overhead_partnerdata t1 left join overhead_orgtype t2 
+on t1.partner=t2.partner and t1.orgtype=t2.orgtype where t1.agency="USDOL" and t1.location="International" group by partner, year;
+*/
+-- check -- It works
+/*Create temporary table- PHLAB */
+DROP TABLE if exists Overhead_temp_phlab;
+create table overhead_temp_phlab as 
+SELECT year,PARTNER,ORGTYPE,LOCATION,AGENCY,BUDGETCODE,sum(AMOUNT) as amount FROM `overhead_partnerdata` where BUDGETCODE='HLAB' AND LOCATION="international"
+ group by year,PARTNER order by year,PARTNER;
+ 
+ select * from overhead_temp_phlab;
+SELECT * FROM overhead_assump_applied_avge_retentionrate;
+/* Final Code. It works. Checked Already*/
+
+SELECT averageretentionrate into @avgretrate from overhead_assump_applied_avge_retentionrate where FundAgency='USDOL';
+
+-- Code to produce MDCB_OverheadTotal costs for USDOL by year
+drop table if exists overhead_USDOL_MDCB_Overhead;
+Create table overhead_USDOL_MDCB_Overhead as
+SELECT distinct t1.year, t1.partner, t1.location, t1.orgtype, t1.agency,t1.amount,((t1.amount*IFNULL(t2.average,@avgretrate))/100 - IFNULL(t3.amount,0)-ifnull(t4.totalamount,0)) as MDCB_Overhead from overhead_usdol t1 
+left join Overhead_PartnerRetentionCalc_AvgeRetentionRate t2 on  t1.agency=t2.fundagency 
+left join overhead_temp_phlab t3 on t2.FUNDAGENCY=t3.Agency and t2.partner=t3.partner
+left join overhead_crosscuts t4 on t3.agency=t4.fundagency and t3.partner=t4.partner and t3.year=t4.year
+group by t1.year, t1.partner;
+
+Select * from overhead_USDOL_MDCB_Overhead;
+
+/* USDOL MDCB Overhead Total computation year wise*/
+/* This code will be carried out in pyyhon later
+drop table if exists overhead_USDOL_MDCB_Overhead_Total;
+Create table overhead_USDOL_MDCB_Overhead_Total as 
+select year, PARTNER, orgtype, sum(MDCB_Overhead) as MDCB_OverheadTotal from overhead_USDOL_MDCB_Overhead group by year;
+
+Select * from overhead_USDOL_MDCB_Overhead_Total;
+*/
+
+/* USDOL CURRENT(ON-Campus Scenario) calculation*/
+drop table if exists overhead_USDOL_CurrentOnCampusScenario;
+create table overhead_USDOL_CurrentOnCampusScenario as
+select t1.year as year, t1.partner as Partner,t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate, 
+((t1.MDCB_Overhead)/(1+ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)))) *ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)) as InternationalScenario 
+from overhead_USDOL_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year group by t1.year, t1.partner;
+
+select * from  overhead_USDOL_CurrentOnCampusScenario;
+Select year, sum(InternationalScenario) as MDCB_OverheadTotal from overhead_USDOL_CurrentOnCampusScenario group by year;
+
+/* USDOL Baseline Scenario(Off-Campus Scenario/OnCampus IOs) calculation..Works*/
+drop table if exists overhead_USDOL_OffCampusOnCampusIOs;
+create table overhead_USDOL_OffCampusOnCampusIOs as 
+select t1.year as year, t1.partner as Partner, 
+t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate,t2.University_Off_CampusOverheadRate as UniversityOffCampusRate,
+(if(t4.orgtype="University",
+((t1.MDCB_Overhead)/(1+ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)))) *ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)),
+((t1.MDCB_Overhead)/(1+ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)))) *ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100))) ) AS OffCampus_OnCampusIOs
+ from overhead_USDOL_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year
+left join  overhead_usdol t4 on t1.partner=t4.partner and t1.year=t4.year group by t1.year, t1.partner;
+
+select * from overhead_USDOL_OffCampusOnCampusIOs;
+
+Select year, sum(OffCampus_OnCampusIOs) as MDCB_OverheadTotal from overhead_USDOL_OffCampusOnCampusIOs group by year;
+
+/* USDOL CURRENT(All Off-Campus Scenario) calculation... Works*/
+drop table if exists overhead_USDOL_AllOffCampus;
+Create table overhead_USDOL_AllOffCampus as 
+select t1.year as year, t1.partner as Partner,t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate,t2.University_Off_CampusOverheadRate as UniversityOffCampusRate, 
+((t1.MDCB_Overhead)/(1+ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)))) *ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)) as InternationalScenario 
+from overhead_USDOL_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year group by t1.year, t1.partner;
+
+select * from overhead_USDOL_AllOffCampus;
+Select year, sum(InternationalScenario) as MDCB_OverheadTotal from overhead_USDOL_AllOffCampus group by year;
+
+
+/********************************************************** SQL CODES to produce the USDOL table ends here***************************************************
+-- ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+/********************************************************** SQL CODES to produce the USDOD table starts here***************************************************/
+
+-- Create table that has list of partners funded by "USDOD" and are lcoated as "International"
+
+drop table if exists overhead_USDOD;
+create table overhead_USDOD as
+SELECT   year, PARTNER,  location, orgtype, agency, sum(amount)  as amount FROM newoverheaddb.overhead_partnerdata 
+where agency="USDOD"  and location="International"  group by PARTNER, year;
+
+select * from overhead_USDOD;
+
+SELECT averageretentionrate into @avgretrate from overhead_assump_applied_avge_retentionrate where FundAgency='USDOD';
+
+-- Code to produce MDCB_OverheadTotal costs for USDOD by year
+drop table if exists overhead_USDOD_MDCB_Overhead;
+Create table overhead_USDOD_MDCB_Overhead as
+SELECT distinct t1.year, t1.partner, t1.location, t1.orgtype, t1.agency,t1.amount,
+((t1.amount*IFNULL(t2.average,@avgretrate))/100 - IFNULL(t3.amount,0)-ifnull(t4.totalamount,0)) as MDCB_Overhead from overhead_USDOD t1 
+left join Overhead_PartnerRetentionCalc_AvgeRetentionRate t2 on  t1.agency=t2.fundagency 
+left join overhead_temp_phlab t3 on t2.FUNDAGENCY=t3.Agency and t2.partner=t3.partner
+left join overhead_crosscuts t4 on t3.agency=t4.fundagency and t3.partner=t4.partner and t3.year=t4.year
+group by t1.year, t1.partner;
+
+Select * from overhead_USDOD_MDCB_Overhead;
+Select year, sum(MDCB_Overhead) as MDCB_OverheadTotal from overhead_USDOD_MDCB_Overhead group by year;
+
+/* USDOD MDCB Overhead Total computation year wise*/
+/* These values will be computed in python later
+drop table if exists overhead_USDOD_MDCB_Overhead_Total;
+Create table overhead_USDOD_MDCB_Overhead_Total as 
+select year, PARTNER, orgtype, sum(MDCB_Overhead) as MDCB_OverheadTotal from overhead_USDOD_MDCB_Overhead group by year;
+
+Select * from overhead_USDOD_MDCB_Overhead_Total;
+*/
+
+/* USDOD CURRENT(ON-Campus Scenario) calculation*/
+
+DROP table if exists overhead_USDOD_CurrentOnCampusScenario;
+create table overhead_USDOD_CurrentOnCampusScenario as
+select t1.year as year, t1.partner as Partner,t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate, t2.University_Off_CampusOverheadRate as UniversityOffCampusRate,
+((t1.MDCB_Overhead)/(1+ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)))) *ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)) as InternationalScenario 
+from overhead_USDOD_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year group by t1.year, t1.partner;
+
+select * from overhead_USDOD_CurrentOnCampusScenario;
+
+Select year, sum(InternationalScenario) as MDCB_OverheadTotal from overhead_USDOD_CurrentOnCampusScenario group by year;
+
+/* USDOD Baseline Scenario(Off-Campus Scenario/OnCampus IOs) calculation..Works*/
+
+Drop table if exists overhead_USDOD_OffCampusOnCampusIO;
+create table overhead_USDOD_OffCampusOnCampusIO as
+select t1.year as year, t1.partner as Partner, 
+t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate,t2.University_Off_CampusOverheadRate as UniversityOffCampusRate,
+(if(t4.orgtype="University",
+((t1.MDCB_Overhead)/(1+ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)))) *ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)),
+((t1.MDCB_Overhead)/(1+ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)))) *ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100))) ) AS OffCampus_OnCampusIOs
+ from overhead_USDOD_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year
+left join  overhead_USDOD t4 on t1.partner=t4.partner and t1.year=t4.year group by t1.year, t1.partner;
+
+Select year, sum(OffCampus_OnCampusIOs) as MDCB_OffCampusOnCampusIO from overhead_USDOD_OffCampusOnCampusIO group by year;
+
+/* USDOD CURRENT(All Off-Campus Scenario) calculation... Works*/
+drop table if exists overhead_USDOD_AllOffCampus;
+CREATE table overhead_USDOD_AllOffCampus as
+select t1.year as year, t1.partner as Partner,t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate, t2.University_Off_CampusOverheadRate as UniversityOffCampusRate,
+((t1.MDCB_Overhead)/(1+ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)))) *ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)) as InternationalScenario 
+from overhead_USDOD_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year group by t1.year, t1.partner;
+
+
+Select year, sum(InternationalScenario) as MDCB_IntScenarioTotal from overhead_USDOD_AllOffCampus group by year;
+
+/********************************************************** SQL CODES to produce the USDOd table ends here***************************************************
+-- ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+/********************************************************** SQL CODES to produce the USAID starts from here***************************************************/
+
+drop table if exists overhead_USAID;
+create table overhead_USAID as
+SELECT   year, PARTNER,  location, orgtype, agency, sum(amount)  as amount FROM newoverheaddb.overhead_partnerdata 
+where agency="USAID"  and location="International" and year>2006 group by PARTNER, year;
+
+select * from overhead_USAID;
+
+SELECT averageretentionrate into @avgretrate from overhead_assump_applied_avge_retentionrate where FundAgency='USAID';
+
+-- Code to produce MDCB_Overhead costs for USAID by year
+drop table if exists overhead_USAID_MDCB_Overhead;
+Create table overhead_USAID_MDCB_Overhead as
+SELECT distinct t1.year, t1.partner, t1.location, t1.orgtype, t1.agency,t1.amount,((t1.amount*IFNULL(t2.average,@avgretrate))/100 - IFNULL(t3.amount,0)-ifnull(t4.totalamount,0)) as MDCB_Overhead from overhead_USAID t1 
+left join Overhead_PartnerRetentionCalc_AvgeRetentionRate t2 on  t1.agency=t2.fundagency 
+left join overhead_temp_phlab t3 on t2.FUNDAGENCY=t3.Agency and t2.partner=t3.partner
+left join overhead_crosscuts t4 on t3.agency=t4.fundagency and t3.partner=t4.partner and t3.year=t4.year
+group by  t1.partner, t1.year;
+
+Select * from overhead_USAID_MDCB_Overhead;
+
+/* USAID CURRENT(ON-Campus Scenario) calculation*/
+drop table if exists overhead_USAID_CurrentOnCampusScenario; 
+Create table overhead_USAID_CurrentOnCampusScenario as
+select t1.year as year, t1.partner as Partner,t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate,t2.University_Off_CampusOverheadRate as UniversityOffCampusRate, 
+((t1.MDCB_Overhead)/(1+ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)))) *ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)) as InternationalScenario 
+from overhead_USAID_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year group by t1.year, t1.partner;
+
+
+
+/* USAID Baseline Scenario(Off-Campus Scenario/OnCampus IOs) calculation..Works*/
+DROP TABLE if exists overhead_USAID_OffCampusOnCampusIOs;
+CREATE TABLE overhead_USAID_OffCampusOnCampusIOs  AS  
+select t1.year as year, t1.partner as Partner, 
+t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate,t2.University_Off_CampusOverheadRate as UniversityOffCampusRate,
+(if(t4.orgtype="University",
+((t1.MDCB_Overhead)/(1+ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)))) *ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)),
+((t1.MDCB_Overhead)/(1+ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)))) *ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100))) ) AS OffCampus_OnCampusIOs
+ from overhead_USAID_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year
+left join  overhead_USAID t4 on t1.partner=t4.partner and t1.year=t4.year group by t1.year, t1.partner;
+
+/* USAID CURRENT(All Off-Campus Scenario) calculation... Works*/
+drop table if exists overhead_USAID_AllOffCampus ;
+create table overhead_USAID_AllOffCampus  as 
+select t1.year as year, t1.partner as Partner,t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate,
+ t2.University_Off_CampusOverheadRate as UniversityOffCampusRate,
+((t1.MDCB_Overhead)/(1+ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)))) *ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)) as InternationalScenario 
+from overhead_USAID_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year group by t1.year, t1.partner;
+
+SELECT * FROM overhead_USAID_AllOffCampus;
+
+/********************************************************** SQL CODES to produce the USAID table ends here***************************************************
+-- ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+/********************************************************** SQL CODES to produce the South And Central Asia starts from here***************************************************/
+drop table if exists overhead_SouthCentralAsia;
+create table overhead_SouthCentralAsia as
+SELECT   year, PARTNER,  location, orgtype, agency, sum(amount)  as amount FROM newoverheaddb.overhead_partnerdata 
+where agency="State/South And Central Asian Affairs"  and location="International"  group by PARTNER, year;
+
+select * from overhead_SouthCentralAsia;
+
+SELECT averageretentionrate into @avgretrate from overhead_assump_applied_avge_retentionrate where FundAgency='State/South And Central Asian Affairs';
+
+-- Code to produce MDCB_OverheadTotal costs for USDOL by year
+drop table if exists overhead_SouthCentralAsia_MDCB_Overhead;
+Create table overhead_SouthCentralAsia_MDCB_Overhead as
+SELECT distinct t1.year, t1.partner, t1.location, t1.orgtype, t1.agency,t1.amount,((t1.amount*IFNULL(t2.average,@avgretrate))/100 - IFNULL(t3.amount,0)-ifnull(t4.totalamount,0)) as MDCB_Overhead from overhead_SouthCentralAsia t1 
+left join Overhead_PartnerRetentionCalc_AvgeRetentionRate t2 on  t1.agency=t2.fundagency 
+left join overhead_temp_phlab t3 on t2.FUNDAGENCY=t3.Agency and t2.partner=t3.partner
+left join overhead_crosscuts t4 on t3.agency=t4.fundagency and t3.partner=t4.partner and t3.year=t4.year
+group by t1.year, t1.partner;
+
+Select * from overhead_SouthCentralAsia_MDCB_Overhead;
+
+/* SouthCentralAsia MDCB Overhead Total computation year wise*/
+/* This code will be carried out in pyyhon later
+drop table if exists overhead_SouthCentralAsia_MDCB_Overhead_Total;
+Create table overhead_SouthCentralAsia_MDCB_Overhead_Total as 
+select year, PARTNER, orgtype, sum(MDCB_Overhead) as MDCB_OverheadTotal from overhead_SouthCentralAsia_MDCB_Overhead group by year;
+
+Select * from overhead_SouthCentralAsia_MDCB_Overhead_Total;
+*/
+
+/* SouthCentralAsia CURRENT(ON-Campus Scenario) calculation*/
+drop table if exists overhead_SouthCentralAsia_CurrentOnCampusScenario;
+Create table overhead_SouthCentralAsia_CurrentOnCampusScenario as
+select t1.year as year, t1.partner as Partner,t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate, 
+((t1.MDCB_Overhead)/(1+ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)))) *ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)) as InternationalScenario 
+from overhead_SouthCentralAsia_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year group by t1.year, t1.partner;
+
+
+/* SouthCentralAsia Baseline Scenario(Off-Campus Scenario/OnCampus IOs) calculation..Works*/
+drop table if exists overhead_SouthCentralAsia_OffCampusOnCampusIOs;
+Create table overhead_SouthCentralAsia_OffCampusOnCampusIOs as
+select t1.year as year, t1.partner as Partner, 
+t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate,t2.University_Off_CampusOverheadRate as UniversityOffCampusRate,
+(if(t4.orgtype="University",
+((t1.MDCB_Overhead)/(1+ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)))) *ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)),
+((t1.MDCB_Overhead)/(1+ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)))) *ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100))) ) AS OffCampus_OnCampusIOs
+ from overhead_SouthCentralAsia_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year
+left join  overhead_SouthCentralAsia t4 on t1.partner=t4.partner and t1.year=t4.year group by t1.year, t1.partner;
+
+
+/* SouthCentralAsia  CURRENT(All Off-Campus Scenario) calculation... Works*/
+drop table if exists overhead_SouthCentralAsia_AllOffCampus;
+Create table overhead_SouthCentralAsia_AllOffCampus as
+select t1.year as year, t1.partner as Partner,t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate,t2.University_Off_CampusOverheadRate as UniversityOffCampusRate, 
+((t1.MDCB_Overhead)/(1+ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)))) *ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)) as InternationalScenario 
+from overhead_SouthCentralAsia_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year group by t1.year, t1.partner;
+/********************************************************** SQL CODES to produce the SouthCentralAsia  table ends here***************************************************
+-- ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+/********************************************************** SQL CODES to produce the Western Hemisphere  starts from here***************************************************/
+drop table if exists overhead_WesternHemisphere;
+create table overhead_WesternHemisphere as
+SELECT   year, PARTNER,  location, orgtype, agency, sum(amount)  as amount FROM newoverheaddb.overhead_partnerdata 
+where agency="State/Western Hemisphere Affairs"  and location="International"  group by PARTNER, year;
+
+select * from overhead_WesternHemisphere;
+
+SELECT averageretentionrate into @avgretrate from overhead_assump_applied_avge_retentionrate where FundAgency='State/Western Hemisphere Affairs';
+
+-- Code to produce MDCB_OverheadTotal costs for State/Western Hemisphere Affairs by year
+drop table if exists overhead_WesternHemisphere_MDCB_Overhead;
+Create table overhead_WesternHemisphere_MDCB_Overhead as
+SELECT distinct t1.year, t1.partner, t1.location, t1.orgtype, t1.agency,t1.amount,((t1.amount*IFNULL(t2.average,@avgretrate))/100 - IFNULL(t3.amount,0)-ifnull(t4.totalamount,0)) as MDCB_Overhead from overhead_WesternHemisphere t1 
+left join Overhead_PartnerRetentionCalc_AvgeRetentionRate t2 on  t1.agency=t2.fundagency 
+left join overhead_temp_phlab t3 on t2.FUNDAGENCY=t3.Agency and t2.partner=t3.partner
+left join overhead_crosscuts t4 on t3.agency=t4.fundagency and t3.partner=t4.partner and t3.year=t4.year
+group by t1.year, t1.partner;
+
+Select * from overhead_WesternHemisphere_MDCB_Overhead;
+
+/* USDOL MDCB Overhead Total computation year wise*/
+/* This code will be carried out in pyyhon later
+drop table if exists overhead_WesternHemisphere_MDCB_Overhead_Total;
+Create table overhead_WesternHemisphere_MDCB_Overhead_Total as 
+select year, PARTNER, orgtype, sum(MDCB_Overhead) as MDCB_OverheadTotal from overhead_WesternHemisphere_MDCB_Overhead group by year;
+
+Select * from overhead_WesternHemisphere_MDCB_Overhead_Total;
+*/
+
+/* WesternHemisphere CURRENT(ON-Campus Scenario) calculation*/
+select t1.year as year, t1.partner as Partner,t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate, 
+((t1.MDCB_Overhead)/(1+ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)))) *ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)) as InternationalScenario 
+from overhead_WesternHemisphere_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year group by t1.year, t1.partner;
+
+
+/* WesternHemisphere Baseline Scenario(Off-Campus Scenario/OnCampus IOs) calculation..Works*/
+select t1.year as year, t1.partner as Partner, 
+t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate,t2.University_Off_CampusOverheadRate as UniversityOffCampusRate,
+(if(t4.orgtype="University",
+((t1.MDCB_Overhead)/(1+ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)))) *ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)),
+((t1.MDCB_Overhead)/(1+ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)))) *ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100))) ) AS OffCampus_OnCampusIOs
+ from overhead_WesternHemisphere_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nWesternHemisphere t4 on t1.partner=t4.partner and t1.year=t4.year group by t1.year, t1.partner;
+
+/* WesternHemisphere CURRENT(All Off-Campus Scenario) calculation... Works*/
+select t1.year as year, t1.partner as Partner,t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate,t2.University_Off_CampusOverheadRate as UniversityOffCampusRate, 
+((t1.MDCB_Overhead)/(1+ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)))) *ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)) as InternationalScenario 
+from overhead_WesternHemisphere_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year group by t1.year, t1.partner;
+/********************************************************** SQL CODES to produce the WesternHemisphere table ends here***************************************************
+-- ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+/********************************************************** SQL CODES to produce the STATE table ends here***************************************************/
+drop table if exists overhead_State;
+create table overhead_State as
+SELECT   year, PARTNER,  location, orgtype, agency, sum(amount)  as amount FROM newoverheaddb.overhead_partnerdata 
+where agency="State"  and location="International"  group by PARTNER, year;
+
+select * from overhead_State;
+
+SELECT averageretentionrate into @avgretrate from overhead_assump_applied_avge_retentionrate where FundAgency='USDOL';
+
+-- Code to produce MDCB_OverheadTotal costs for USDOL by year
+drop table if exists overhead_State_MDCB_Overhead;
+Create table overhead_State_MDCB_Overhead as
+SELECT distinct t1.year, t1.partner, t1.location, t1.orgtype, t1.agency,t1.amount,((t1.amount*IFNULL(t2.average,@avgretrate))/100 - IFNULL(t3.amount,0)-ifnull(t4.totalamount,0)) as MDCB_Overhead from overhead_State t1 
+left join Overhead_PartnerRetentionCalc_AvgeRetentionRate t2 on  t1.agency=t2.fundagency 
+left join overhead_temp_phlab t3 on t2.FUNDAGENCY=t3.Agency and t2.partner=t3.partner
+left join overhead_crosscuts t4 on t3.agency=t4.fundagency and t3.partner=t4.partner and t3.year=t4.year
+group by t1.year, t1.partner;
+
+Select * from overhead_State_MDCB_Overhead;
+
+/* USDOL MDCB Overhead Total computation year wise*/
+/* This code will be carried out in pyyhon later
+drop table if exists overhead_State_MDCB_Overhead_Total;
+Create table overhead_State_MDCB_Overhead_Total as 
+select year, PARTNER, orgtype, sum(MDCB_Overhead) as MDCB_OverheadTotal from overhead_State_MDCB_Overhead group by year;
+
+Select * from overhead_State_MDCB_Overhead_Total;
+*/
+/* State CURRENT(ON-Campus Scenario) calculation*/
+drop table if exists overhead_State_CurrentOnCampusScenario;
+create table overhead_State_CurrentOnCampusScenario as
+select t1.year as year, t1.partner as Partner,t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate, 
+((t1.MDCB_Overhead)/(1+ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)))) *ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)) as InternationalScenario 
+from overhead_State_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year group by t1.year, t1.partner;
+
+select * from overhead_State_CurrentOnCampusScenario;
+
+/* State Baseline Scenario(Off-Campus Scenario/OnCampus IOs) calculation..Works*/
+drop table if exists overhead_State_OffCampusOnCampusIOs;
+create table overhead_State_OffCampusOnCampusIOs as
+select t1.year as year, t1.partner as Partner, 
+t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate,t2.University_Off_CampusOverheadRate as UniversityOffCampusRate,
+(if(t4.orgtype="University",
+((t1.MDCB_Overhead)/(1+ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)))) *ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)),
+((t1.MDCB_Overhead)/(1+ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)))) *ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100))) ) AS OffCampus_OnCampusIOs
+ from overhead_State_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year
+left join  overhead_State t4 on t1.partner=t4.partner and t1.year=t4.year group by t1.year, t1.partner;
+
+select * from overhead_State_OffCampusOnCampusIOs;
+
+/* State CURRENT(All Off-Campus Scenario) calculation... Works*/
+drop table if exists overhead_State_AllOffCampus;
+create table overhead_State_AllOffCampus as
+select t1.year as year, t1.partner as Partner,t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate,t2.University_Off_CampusOverheadRate as UniversityOffCampusRate, 
+((t1.MDCB_Overhead)/(1+ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)))) *ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)) as InternationalScenario 
+from overhead_State_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year group by t1.year, t1.partner;
+
+select * from overhead_State_AllOffCampus;
+
+/********************************************************** SQL CODES to produce the State table ends here***************************************************
+-- ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+/********************************************************** SQL CODES to produce the HHS/SAMHSA starts from here***************************************************/
+drop table if exists overhead_SAMHSA;
+create table overhead_SAMHSA as
+SELECT   year, PARTNER,  location, orgtype, agency, sum(amount)  as amount FROM newoverheaddb.overhead_partnerdata 
+where agency="HHS/SAMHSA"  and location="International"  group by PARTNER, year;
+
+select * from overhead_SAMHSA;
+
+SELECT averageretentionrate into @avgretrate from overhead_assump_applied_avge_retentionrate where FundAgency='USDOL';
+
+-- Code to produce MDCB_OverheadTotal costs for SAMHSA by year
+drop table if exists overhead_SAMHSA_MDCB_Overhead;
+Create table overhead_SAMHSA_MDCB_Overhead as
+SELECT distinct t1.year, t1.partner, t1.location, t1.orgtype, t1.agency,t1.amount,((t1.amount*IFNULL(t2.average,@avgretrate))/100 - IFNULL(t3.amount,0)-ifnull(t4.totalamount,0)) as MDCB_Overhead from overhead_SAMHSA t1 
+left join Overhead_PartnerRetentionCalc_AvgeRetentionRate t2 on  t1.agency=t2.fundagency 
+left join overhead_temp_phlab t3 on t2.FUNDAGENCY=t3.Agency and t2.partner=t3.partner
+left join overhead_crosscuts t4 on t3.agency=t4.fundagency and t3.partner=t4.partner and t3.year=t4.year
+group by t1.year, t1.partner;
+
+Select * from overhead_SAMHSA_MDCB_Overhead;
+
+/* SAMHSA MDCB Overhead Total computation year wise*/
+/* This code will be carried out in pyyhon later
+drop table if exists overhead_SAMHSA_MDCB_Overhead_Total;
+Create table overhead_SAMHSA_MDCB_Overhead_Total as 
+select year, PARTNER, orgtype, sum(MDCB_Overhead) as MDCB_OverheadTotal from overhead_SAMHSA_MDCB_Overhead group by year;
+
+Select * from overhead_SAMHSA_MDCB_Overhead_Total;
+*/
+
+/* SAMHSA CURRENT(ON-Campus Scenario) calculation*/
+DROP TABLE IF EXISTS overhead_SAMHSA_CurrentOnCampusScenario ;
+CREATE TABLE overhead_SAMHSA_CurrentOnCampusScenario AS
+select t1.year as year, t1.partner as Partner,t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate, 
+((t1.MDCB_Overhead)/(1+ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)))) *ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)) as InternationalScenario 
+from overhead_SAMHSA_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year group by t1.year,t1.partner ;
+
+select * from overhead_SAMHSA_CurrentOnCampusScenario;
+
+/* SAMHSA Baseline Scenario(Off-Campus Scenario/OnCampus IOs) calculation..Works*/
+DROP TABLE IF EXISTS overhead_SAMHSA_OffCampusOnCampusIOs;
+create table overhead_SAMHSA_OffCampusOnCampusIOs as
+select t1.year as year, t1.partner as Partner, 
+t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate,t2.University_Off_CampusOverheadRate as UniversityOffCampusRate,
+(if(t4.orgtype="University",
+((t1.MDCB_Overhead)/(1+ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)))) *ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)),
+((t1.MDCB_Overhead)/(1+ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)))) *ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100))) ) AS OffCampus_OnCampusIOs
+ from overhead_SAMHSA_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year
+left join  overhead_SAMHSA t4 on t1.partner=t4.partner and t1.year=t4.year group by t1.year,t1.partner ;
+
+select * from overhead_SAMHSA_OffCampusOnCampusIOs;
+
+/* SAMHSA CURRENT(All Off-Campus Scenario) calculation... Works*/
+DROP TABLE IF EXISTS overhead_SAMHSA_AllOffCampus;
+create table overhead_SAMHSA_AllOffCampus  as 
+select t1.year as year, t1.partner as Partner,t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate,t2.University_Off_CampusOverheadRate as UniversityOffCampusRate, 
+((t1.MDCB_Overhead)/(1+ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)))) *ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)) as InternationalScenario 
+from overhead_SAMHSA_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year group by t1.year,t1.partner  ;
+
+select * from overhead_SAMHSA_AllOffCampus;
+/********************************************************** SQL CODES to produce the SAMHSA table ends here***************************************************
+-- ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+/********************************************************** SQL CODES to produce the Redacted starts from here***************************************************/
+drop table if exists overhead_Redacted ;
+create table overhead_Redacted  as
+SELECT   year, PARTNER,  location, orgtype, agency, sum(amount)  as amount FROM newoverheaddb.overhead_partnerdata 
+where agency="Redacted "  and location="International" and year>2006 group by PARTNER, year;
+
+select * from overhead_Redacted ;
+
+SELECT averageretentionrate into @avgretrate from overhead_assump_applied_avge_retentionrate where FundAgency='USDOL';
+
+-- Code to produce MDCB_OverheadTotal costs for USDOL by year
+drop table if exists overhead_Redacted_MDCB_Overhead;
+Create table overhead_Redacted_MDCB_Overhead as
+SELECT distinct t1.year, t1.partner, t1.location, t1.orgtype, t1.agency,t1.amount,((t1.amount*IFNULL(t2.average,@avgretrate))/100 - IFNULL(t3.amount,0)-ifnull(t4.totalamount,0)) as MDCB_Overhead from overhead_Redacted t1 
+left join Overhead_PartnerRetentionCalc_AvgeRetentionRate t2 on  t1.agency=t2.fundagency 
+left join overhead_temp_phlab t3 on t2.FUNDAGENCY=t3.Agency and t2.partner=t3.partner
+left join overhead_crosscuts t4 on t3.agency=t4.fundagency and t3.partner=t4.partner and t3.year=t4.year
+group by t1.year, t1.partner;
+
+Select * from overhead_Redacted_MDCB_Overhead;
+
+/* USDOL MDCB Overhead Total computation year wise*/
+/* This code will be carried out in pyyhon later
+drop table if exists overhead_Redacted_MDCB_Overhead_Total;
+Create table overhead_Redacted_MDCB_Overhead_Total as 
+select year, PARTNER, orgtype, sum(MDCB_Overhead) as MDCB_OverheadTotal from overhead_USDOL_MDCB_Overhead group by year;
+
+Select * from overhead_Redacted_MDCB_Overhead_Total;
+*/
+
+/* Redacted CURRENT(ON-Campus Scenario) calculation*/
+drop table if exists overhead_Redacted_CurrentOnCampusScenario;
+create table overhead_Redacted_CurrentOnCampusScenario as
+select t1.year as year, t1.partner as Partner,t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate, 
+((t1.MDCB_Overhead)/(1+ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)))) *ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)) as InternationalScenario 
+from overhead_Redacted_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year group by t1.year, t1.partner;
+
+select * from overhead_Redacted_CurrentOnCampusScenario;
+
+/* Redacted Baseline Scenario(Off-Campus Scenario/OnCampus IOs) calculation..Works*/
+drop table if exists overhead_Redacted_OffCampusOnCampusIOs;
+create table overhead_Redacted_OffCampusOnCampusIOs as
+select t1.year as year, t1.partner as Partner, 
+t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate,t2.University_Off_CampusOverheadRate as UniversityOffCampusRate,
+(if(t4.orgtype="University",
+((t1.MDCB_Overhead)/(1+ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)))) *ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)),
+((t1.MDCB_Overhead)/(1+ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)))) *ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100))) ) AS OffCampus_OnCampusIOs
+ from overhead_Redacted_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year
+left join  overhead_Redacted t4 on t1.partner=t4.partner and t1.year=t4.year group by t1.year, t1.partner;
+
+select * from overhead_Redacted_OffCampusOnCampusIOs;
+
+/* Redacted CURRENT(All Off-Campus Scenario) calculation... Works*/
+drop table if exists overhead_Redacted_AllOffCampus;
+create table overhead_Redacted_AllOffCampus as
+select t1.year as year, t1.partner as Partner,t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate,t2.University_Off_CampusOverheadRate as UniversityOffCampusRate, 
+((t1.MDCB_Overhead)/(1+ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)))) *ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)) as InternationalScenario 
+from overhead_Redacted_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year group by t1.year, t1.partner;
+
+select * from overhead_Redacted_AllOffCampus;
+
+/********************************************************** SQL CODES to produce the Redacted table ends here***************************************************
+-- ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+/********************************************************** SQL CODES to produce the State/PRM starts from here***************************************************/
+drop table if exists overhead_StatePRM;
+create table overhead_StatePRM as
+SELECT   year, PARTNER,  location, orgtype, agency, sum(amount)  as amount FROM newoverheaddb.overhead_partnerdata 
+where agency="State/PRM"  and location="International" and year>2006 group by PARTNER, year;
+
+select * from overhead_StatePRM;
+
+SELECT averageretentionrate into @avgretrate from overhead_assump_applied_avge_retentionrate where FundAgency='USDOL';
+
+-- Code to produce MDCB_OverheadTotal costs for USDOL by year
+drop table if exists overhead_StatePRM_MDCB_Overhead;
+Create table overhead_StatePRM_MDCB_Overhead as
+SELECT distinct t1.year, t1.partner, t1.location, t1.orgtype, t1.agency,t1.amount,((t1.amount*IFNULL(t2.average,@avgretrate))/100 - IFNULL(t3.amount,0)-ifnull(t4.totalamount,0)) as MDCB_Overhead from overhead_StatePRM t1 
+left join Overhead_PartnerRetentionCalc_AvgeRetentionRate t2 on  t1.agency=t2.fundagency 
+left join overhead_temp_phlab t3 on t2.FUNDAGENCY=t3.Agency and t2.partner=t3.partner
+left join overhead_crosscuts t4 on t3.agency=t4.fundagency and t3.partner=t4.partner and t3.year=t4.year
+group by t1.year, t1.partner;
+
+Select * from overhead_StatePRM_MDCB_Overhead;
+
+/* StatePRM MDCB Overhead Total computation year wise*/
+/* This code will be carried out in pyyhon later
+drop table if exists overhead_StatePRM_MDCB_Overhead_Total;
+Create table overhead_StatePRM_MDCB_Overhead_Total as 
+select year,sum(MDCB_Overhead) as MDCB_OverheadTotal from overhead_StatePRM_MDCB_Overhead group by year;
+
+Select * from overhead_StatePRM_MDCB_Overhead_Total;
+*/
+
+/* StatePRM CURRENT(ON-Campus Scenario) calculation*/
+drop table if exists overhead_StatePRM_CurrentOnCampusScenario;
+create table overhead_StatePRM_CurrentOnCampusScenario as
+select t1.year as year, t1.partner as Partner,t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate, 
+((t1.MDCB_Overhead)/(1+ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)))) *ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)) as InternationalScenario 
+from overhead_StatePRM_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year group by t1.year, t1.partner;
+
+select * from overhead_StatePRM_CurrentOnCampusScenario;
+
+
+/* StatePRM Baseline Scenario(Off-Campus Scenario/OnCampus IOs) calculation..Works*/
+drop table if exists overhead_StatePRM_OffCampusOnCampusIOs;
+create table  overhead_StatePRM_OffCampusOnCampusIOs as
+select t1.year as year, t1.partner as Partner, 
+t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate,t2.University_Off_CampusOverheadRate as UniversityOffCampusRate,
+(if(t4.orgtype="University",
+((t1.MDCB_Overhead)/(1+ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)))) *ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)),
+((t1.MDCB_Overhead)/(1+ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)))) *ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100))) ) AS OffCampus_OnCampusIOs
+ from overhead_StatePRM_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year
+left join  overhead_StatePRM t4 on t1.partner=t4.partner and t1.year=t4.year group by t1.year, t1.partner;
+
+select * from  overhead_StatePRM_OffCampusOnCampusIOs;
+
+/* StatePRM CURRENT(All Off-Campus Scenario) calculation... Works*/
+drop table if exists overhead_StatePRM_AllOffCampus;
+create table overhead_StatePRM_AllOffCampus as
+select t1.year as year, t1.partner as Partner,t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate,t2.University_Off_CampusOverheadRate as UniversityOffCampusRate, 
+((t1.MDCB_Overhead)/(1+ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)))) *ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)) as InternationalScenario 
+from overhead_StatePRM_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year group by t1.year, t1.partner;
+
+select * from overhead_StatePRM_AllOffCampus;
+Select year, sum(InternationalScenario) as MDCB_OverheadTotal from overhead_StatePRM_AllOffCampus group by year;
+
+/********************************************************** SQL CODES to produce the StatePRM table ends here***************************************************
+-- ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+/********************************************************** SQL CODES to produce the Peace Corps starts from here***************************************************/
+drop table if exists overhead_PeaceCorps;
+create table overhead_PeaceCorps as
+SELECT   year, PARTNER,  location, orgtype, agency, sum(amount)  as amount FROM newoverheaddb.overhead_partnerdata 
+where agency="Peace Corps"  and location="International" and year>2006 group by PARTNER, year;
+
+select * from overhead_PeaceCorps;
+
+SELECT averageretentionrate into @avgretrate from overhead_assump_applied_avge_retentionrate where FundAgency='Peace Corps';
+
+-- Code to produce MDCB_OverheadTotal costs for Peace Corps by year
+drop table if exists overhead_PeaceCorps_MDCB_Overhead;
+Create table overhead_PeaceCorps_MDCB_Overhead as
+SELECT distinct t1.year, t1.partner, t1.location, t1.orgtype, t1.agency,t1.amount,((t1.amount*IFNULL(t2.average,@avgretrate))/100 - IFNULL(t3.amount,0)-ifnull(t4.totalamount,0)) as MDCB_Overhead from overhead_PeaceCorps t1 
+left join Overhead_PartnerRetentionCalc_AvgeRetentionRate t2 on  t1.agency=t2.fundagency 
+left join overhead_temp_phlab t3 on t2.FUNDAGENCY=t3.Agency and t2.partner=t3.partner
+left join overhead_crosscuts t4 on t3.agency=t4.fundagency and t3.partner=t4.partner and t3.year=t4.year
+group by t1.year, t1.partner;
+
+Select * from overhead_PeaceCorps_MDCB_Overhead;
+
+/* PeaceCorps MDCB Overhead Total computation year wise*/
+/* This code will be carried out in pyyhon later
+drop table if exists overhead_PeaceCorps_MDCB_Overhead_Total;
+Create table overhead_PeaceCorps_MDCB_Overhead_Total as 
+select year, PARTNER, orgtype, sum(MDCB_Overhead) as MDCB_OverheadTotal from overhead_PeaceCorps_MDCB_Overhead group by year;
+
+Select * from overhead_PeaceCorps_MDCB_Overhead_Total;
+*/
+
+
+/* PeaceCorps CURRENT(ON-Campus Scenario) calculation*/
+drop table if exists overhead_PeaceCorps_CurrentOnCampusScenario;
+create table overhead_PeaceCorps_CurrentOnCampusScenario as
+select t1.year as year, t1.partner as Partner,t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate, 
+((t1.MDCB_Overhead)/(1+ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)))) *ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)) as InternationalScenario 
+from overhead_PeaceCorps_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year group by t1.year, t1.partner;
+
+select * from overhead_PeaceCorps_CurrentOnCampusScenario;
+
+/* PeaceCorps Baseline Scenario(Off-Campus Scenario/OnCampus IOs) calculation..Works*/
+drop table if exists overhead_PeaceCorps_OffCampusOnCampusIOs;
+create table overhead_PeaceCorps_OffCampusOnCampusIOs as
+select t1.year as year, t1.partner as Partner, 
+t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate,t2.University_Off_CampusOverheadRate as UniversityOffCampusRate,
+(if(t4.orgtype="University",
+((t1.MDCB_Overhead)/(1+ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)))) *ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)),
+((t1.MDCB_Overhead)/(1+ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)))) *ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100))) ) AS OffCampus_OnCampusIOs
+ from overhead_PeaceCorps_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year
+left join  overhead_PeaceCorps t4 on t1.partner=t4.partner and t1.year=t4.year group by t1.year, t1.partner;
+
+select * from overhead_PeaceCorps_OffCampusOnCampusIOs;
+
+/* PeaceCorps CURRENT(All Off-Campus Scenario) calculation... Works*/
+drop table if exists overhead_PeaceCorps_AllOffCampus;
+create table overhead_PeaceCorps_AllOffCampus as
+select t1.year as year, t1.partner as Partner,t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate,t2.University_Off_CampusOverheadRate as UniversityOffCampusRate, 
+((t1.MDCB_Overhead)/(1+ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)))) *ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)) as InternationalScenario 
+from overhead_PeaceCorps_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year group by t1.year, t1.partner;
+
+select * from overhead_PeaceCorps_AllOffCampus;
+/********************************************************** SQL CODES to produce the PeaceCorpstable ends here***************************************************
+-- ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+/********************************************************** SQL CODES to produce the HHS/OGHA starts from here***************************************************/
+drop table if exists overhead_HHSOGHA;
+create table overhead_HHSOGHA as
+SELECT   year, PARTNER,  location, orgtype, agency, sum(amount)  as amount FROM newoverheaddb.overhead_partnerdata 
+where agency="HHS/OGHA"  and location="International"  and year>2006 group by PARTNER, year;
+
+select * from overhead_HHSOGHA;
+
+SELECT averageretentionrate into @avgretrate from overhead_assump_applied_avge_retentionrate where FundAgency='HHS/OGHA';
+
+-- Code to produce MDCB_OverheadTotal costs for HHS/OGHA by year
+drop table if exists overhead_HHSOGHA_MDCB_Overhead;
+Create table overhead_HHSOGHA_MDCB_Overhead as
+SELECT distinct t1.year, t1.partner, t1.location, t1.orgtype, t1.agency,t1.amount,((t1.amount*IFNULL(t2.average,@avgretrate))/100 - IFNULL(t3.amount,0)-ifnull(t4.totalamount,0)) as MDCB_Overhead from overhead_HHSOGHA t1 
+left join Overhead_PartnerRetentionCalc_AvgeRetentionRate t2 on  t1.agency=t2.fundagency 
+left join overhead_temp_phlab t3 on t2.FUNDAGENCY=t3.Agency and t2.partner=t3.partner
+left join overhead_crosscuts t4 on t3.agency=t4.fundagency and t3.partner=t4.partner and t3.year=t4.year
+group by t1.year, t1.partner;
+
+Select * from overhead_HHSOGHA_MDCB_Overhead;
+
+/* HHSOGHA MDCB Overhead Total computation year wise*/
+/* This code will be carried out in pyyhon later
+drop table if exists overhead_HHSOGHA_MDCB_Overhead_Total;
+Create table overhead_HHSOGHA_MDCB_Overhead_Total as 
+select year, PARTNER, orgtype, sum(MDCB_Overhead) as MDCB_OverheadTotal from overhead_HHSOGHA_MDCB_Overhead group by year;
+
+Select * from overhead_HHSOGHA_MDCB_Overhead_Total;
+*/
+
+/* HHSOGHA CURRENT(ON-Campus Scenario) calculation*/
+DROP TABLE IF EXISTS overhead_OGHA_CurrentOnCampusScenario;
+CREATE TABLE overhead_OGHA_CurrentOnCampusScenario AS
+select t1.year as year, t1.partner as Partner,t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate, 
+((t1.MDCB_Overhead)/(1+ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)))) *ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)) as InternationalScenario 
+from overhead_HHSOGHA_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year group by t1.year, t1.partner;
+
+SELECT * FROM overhead_OGHA_CurrentOnCampusScenario;
+
+/* HHSOGHA Baseline Scenario(Off-Campus Scenario/OnCampus IOs) calculation..Works*/
+DROP TABLE IF EXISTS overhead_OGHA_OffCampusOnCampusIOs;
+create table overhead_OGHA_OffCampusOnCampusIOs as
+select t1.year as year, t1.partner as Partner, 
+t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate,t2.University_Off_CampusOverheadRate as UniversityOffCampusRate,
+(if(t4.orgtype="University",
+((t1.MDCB_Overhead)/(1+ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)))) *ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)),
+((t1.MDCB_Overhead)/(1+ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)))) *ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100))) ) AS OffCampus_OnCampusIOs
+ from overhead_HHSOGHA_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year
+left join  overhead_HHSOGHA t4 on t1.partner=t4.partner and t1.year=t4.year group by t1.year, t1.partner;
+
+select * from overhead_OGHA_OffCampusOnCampusIOs;
+
+/* HHSOGHA CURRENT(All Off-Campus Scenario) calculation... Works*/
+DROP TABLE IF EXISTS overhead_OGHA_AllOffCampus;
+CREATE TABLE overhead_OGHA_AllOffCampus AS
+select t1.year as year, t1.partner as Partner,t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate,t2.University_Off_CampusOverheadRate as UniversityOffCampusRate, 
+((t1.MDCB_Overhead)/(1+ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)))) *ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)) as InternationalScenario 
+from overhead_HHSOGHA_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year group by t1.year, t1.partner;
+SELECT * FROM overhead_OGHA_AllOffCampus;
+/********************************************************** SQL CODES to produce the HHSOGHA table ends here***************************************************
+-- ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+/********************************************************** SQL CODES to produce the State/OGAC starts from here***************************************************/
+drop table if exists overhead_StateOGAC;
+create table overhead_StateOGAC as
+SELECT   year, PARTNER,  location, orgtype, agency, sum(amount)  as amount FROM newoverheaddb.overhead_partnerdata 
+where agency="State/OGAC"  and location="International" and year>2006 group by PARTNER, year;
+
+select * from overhead_StateOGAC;
+
+SELECT averageretentionrate into @avgretrate from overhead_assump_applied_avge_retentionrate where FundAgency='State/OGAC';
+
+-- Code to produce MDCB_OverheadTotal costs for USDOL by year
+drop table if exists overhead_StateOGAC_MDCB_Overhead;
+Create table overhead_StateOGAC_MDCB_Overhead as
+SELECT distinct t1.year, t1.partner, t1.location, t1.orgtype, t1.agency,t1.amount,((t1.amount*IFNULL(t2.average,@avgretrate))/100 - IFNULL(t3.amount,0)-ifnull(t4.totalamount,0)) as MDCB_Overhead from overhead_StateOGAC t1 
+left join Overhead_PartnerRetentionCalc_AvgeRetentionRate t2 on  t1.agency=t2.fundagency 
+left join overhead_temp_phlab t3 on t2.FUNDAGENCY=t3.Agency and t2.partner=t3.partner
+left join overhead_crosscuts t4 on t3.agency=t4.fundagency and t3.partner=t4.partner and t3.year=t4.year
+group by t1.year, t1.partner;
+
+Select * from overhead_StateOGAC_MDCB_Overhead;
+
+/* StateOGAC MDCB Overhead Total computation year wise*/
+/* This code will be carried out in pyyhon later
+drop table if exists overhead_StateOGAC_MDCB_Overhead_Total;
+Create table overhead_StateOGAC_MDCB_Overhead_Total as 
+select year, PARTNER, orgtype, sum(MDCB_Overhead) as MDCB_OverheadTotal from overhead_StateOGAC_MDCB_Overhead group by year;
+
+Select * from overhead_StateOGAC_MDCB_Overhead_Total;
+*/
+
+
+/* StateOGAC CURRENT(ON-Campus Scenario) calculation*/
+DROP TABLE IF EXISTS overhead_OGAC_CurrentOnCampusScenario;
+create table overhead_OGAC_CurrentOnCampusScenario as
+select t1.year as year, t1.partner as Partner,t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate, 
+((t1.MDCB_Overhead)/(1+ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)))) *ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)) as InternationalScenario 
+from overhead_StateOGAC_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year group by t1.year, t1.partner;
+
+select * from overhead_OGAC_CurrentOnCampusScenario;
+
+/* StateOGAC Baseline Scenario(Off-Campus Scenario/OnCampus IOs) calculation..Works*/
+DROP TABLE IF EXISTS  overhead_OGAC_OffCampusOnCampusIOs;
+CREATE TABLE  overhead_OGAC_OffCampusOnCampusIOs AS 
+select t1.year as year, t1.partner as Partner, 
+t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate,t2.University_Off_CampusOverheadRate as UniversityOffCampusRate,
+(if(t4.orgtype="University",
+((t1.MDCB_Overhead)/(1+ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)))) *ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)),
+((t1.MDCB_Overhead)/(1+ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)))) *ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100))) ) AS OffCampus_OnCampusIOs
+ from overhead_StateOGAC_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year
+left join  overhead_StateOGAC t4 on t1.partner=t4.partner and t1.year=t4.year group by t1.year, t1.partner;
+
+SELECT * FROM  overhead_OGAC_OffCampusOnCampusIOs;
+
+
+/* StateOGAC CURRENT(All Off-Campus Scenario) calculation... Works*/
+DROP TABLE IF EXISTS overhead_OGAC_AllOffCampus;
+CREATE TABLE overhead_OGAC_AllOffCampus AS
+select t1.year as year, t1.partner as Partner,t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate,t2.University_Off_CampusOverheadRate as UniversityOffCampusRate, 
+((t1.MDCB_Overhead)/(1+ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)))) *ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)) as InternationalScenario 
+from overhead_StateOGAC_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year group by t1.year, t1.partner;
+SELECT * FROM overhead_OGAC_AllOffCampus;
+
+/********************************************************** SQL CODES to produce the StateOGAC table ends here***************************************************
+-- ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+/********************************************************** SQL CODES to produce the HHS/Office of the Secretary starts from here***************************************************/
+drop table if exists overhead_HHSOfficeSecretary	;
+create table overhead_HHSOfficeSecretary as
+SELECT   year, PARTNER,  location, orgtype, agency, sum(amount)  as amount FROM newoverheaddb.overhead_partnerdata 
+where agency="HHS/Office of the Secretary"  and location="International" and year>2006 group by PARTNER, year;
+
+select * from overhead_HHSOfficeSecretary;
+
+SELECT averageretentionrate into @avgretrate from overhead_assump_applied_avge_retentionrate where FundAgency='HHS/Office of the Secretary';
+
+-- Code to produce MDCB_OverheadTotal costs for USDOL by year
+drop table if exists overhead_HHSOfficeSecretary_MDCB_Overhead;
+Create table overhead_HHSOfficeSecretary_MDCB_Overhead as
+SELECT distinct t1.year, t1.partner, t1.location, t1.orgtype, t1.agency,t1.amount,((t1.amount*IFNULL(t2.average,@avgretrate))/100 - IFNULL(t3.amount,0)-ifnull(t4.totalamount,0)) as MDCB_Overhead from overhead_HHSOfficeSecretary t1 
+left join Overhead_PartnerRetentionCalc_AvgeRetentionRate t2 on  t1.agency=t2.fundagency 
+left join overhead_temp_phlab t3 on t2.FUNDAGENCY=t3.Agency and t2.partner=t3.partner
+left join overhead_crosscuts t4 on t3.agency=t4.fundagency and t3.partner=t4.partner and t3.year=t4.year
+group by t1.year, t1.partner;
+
+Select * from overhead_HHSOfficeSecretary_MDCB_Overhead;
+
+/* HHSOfficeSecretary MDCB Overhead Total computation year wise*/
+/* This code will be carried out in pyyhon later
+drop table if exists overhead_HHSOfficeSecretary_MDCB_Overhead_Total;
+Create table overhead_HHSOfficeSecretary_MDCB_Overhead_Total as 
+select year, PARTNER, orgtype, sum(MDCB_Overhead) as MDCB_OverheadTotal from overhead_HHSOfficeSecretary_MDCB_Overhead group by year;
+
+Select * from overhead_HHSOfficeSecretary_MDCB_Overhead_Total;
+*/
+
+/* HHSOfficeSecretar CURRENT(ON-Campus Scenario) calculation*/
+drop table if exists overhead_OfficeSecretary_CurrentOnCampusScenario;
+create table overhead_OfficeSecretary_CurrentOnCampusScenario as 
+select t1.year as year, t1.partner as Partner,t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate, 
+((t1.MDCB_Overhead)/(1+ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)))) *ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)) as InternationalScenario 
+from overhead_HHSOfficeSecretary_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year group by t1.year, t1.partner;
+
+select * from overhead_OfficeSecretary_CurrentOnCampusScenario;
+
+
+/* HHSOfficeSecretary Baseline Scenario(Off-Campus Scenario/OnCampus IOs) calculation..Works*/
+drop table if exists overhead_OfficeSecretary_OffCampusOnCampusIOs;
+create table overhead_OfficeSecretary_OffCampusOnCampusIOs as
+select t1.year as year, t1.partner as Partner, 
+t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate,t2.University_Off_CampusOverheadRate as UniversityOffCampusRate,
+(if(t4.orgtype="University",
+((t1.MDCB_Overhead)/(1+ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)))) *ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)),
+((t1.MDCB_Overhead)/(1+ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)))) *ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100))) ) AS OffCampus_OnCampusIOs
+ from overhead_HHSOfficeSecretary_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year
+left join  overhead_HHSOfficeSecretary t4 on t1.partner=t4.partner and t1.year=t4.year group by t1.year, t1.partner;
+select * from overhead_OfficeSecretary_OffCampusOnCampusIOs;
+
+
+/* HHSOfficeSecretary  CURRENT(All Off-Campus Scenario) calculation... Works*/
+drop table if exists overhead_OfficeSecretary_AllOffCampus;
+create table overhead_OfficeSecretary_AllOffCampus as
+select t1.year as year, t1.partner as Partner,t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate,t2.University_Off_CampusOverheadRate as UniversityOffCampusRate, 
+((t1.MDCB_Overhead)/(1+ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)))) *ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)) as InternationalScenario 
+from overhead_HHSOfficeSecretary_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year group by t1.year, t1.partner;
+
+select * from overhead_OfficeSecretary_AllOffCampus;
+
+/********************************************************** SQL CODES to produce the HHSOfficeSecretary  table ends here***************************************************
+-- ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+/********************************************************** SQL CODES to produce the HHS/NIH starts from here***************************************************/
+drop table if exists overhead_HHSNIH;
+create table overhead_HHSNIH as
+SELECT   year, PARTNER,  location, orgtype, agency, sum(amount)  as amount FROM newoverheaddb.overhead_partnerdata 
+where agency="HHS/NIH"  and location="International" and year>2006 group by PARTNER, year;
+
+select * from overhead_HHSNIH;
+
+SELECT averageretentionrate into @avgretrate from overhead_assump_applied_avge_retentionrate where FundAgency='HHS/NIH';
+
+-- Code to produce MDCB_OverheadTotal costs for USDOL by year
+drop table if exists overhead_HHSNIH_MDCB_Overhead;
+Create table overhead_HHSNIH_MDCB_Overhead as
+SELECT distinct t1.year, t1.partner, t1.location, t1.orgtype, t1.agency,t1.amount,((t1.amount*IFNULL(t2.average,@avgretrate))/100 - IFNULL(t3.amount,0)-ifnull(t4.totalamount,0)) as MDCB_Overhead from overhead_HHSNIH t1 
+left join Overhead_PartnerRetentionCalc_AvgeRetentionRate t2 on  t1.agency=t2.fundagency 
+left join overhead_temp_phlab t3 on t2.FUNDAGENCY=t3.Agency and t2.partner=t3.partner
+left join overhead_crosscuts t4 on t3.agency=t4.fundagency and t3.partner=t4.partner and t3.year=t4.year
+group by t1.year, t1.partner;
+
+Select * from overhead_HHSNIH_MDCB_Overhead;
+
+/* HHSNIH MDCB Overhead Total computation year wise*/
+/* This code will be carried out in pyyhon later
+drop table if exists overhead_USDOL_MDCB_Overhead_Total;
+Create table overhead_HHSNIH_MDCB_Overhead_Total as 
+select year, PARTNER, orgtype, sum(MDCB_Overhead) as MDCB_OverheadTotal from overhead_HHSNIH_MDCB_Overhead group by year;
+
+Select * from overhead_HHSNIH_MDCB_Overhead_Total;
+*/
+
+/* HHSNIH CURRENT(ON-Campus Scenario) calculation*/
+DROP TABLE IF EXISTS overhead_NIH_CurrentOnCampusScenario;
+CREATE TABLE overhead_NIH_CurrentOnCampusScenario AS
+select t1.year as year, t1.partner as Partner,t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate, 
+((t1.MDCB_Overhead)/(1+ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)))) *ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)) as InternationalScenario 
+from overhead_HHSNIH_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year group by t1.partner, t1.year;
+SELECT * FROM overhead_NIH_CurrentOnCampusScenario;
+
+/*HHSNIH Baseline Scenario(Off-Campus Scenario/OnCampus IOs) calculation..Works*/
+DROP TABLE IF EXISTS overhead_NIH_OffCampusOnCampusIOs;
+CREATE TABLE overhead_NIH_OffCampusOnCampusIOs AS
+select t1.year as year, t1.partner as Partner, 
+t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate,t2.University_Off_CampusOverheadRate as UniversityOffCampusRate,
+(if(t4.orgtype="University",
+((t1.MDCB_Overhead)/(1+ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)))) *ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)),
+((t1.MDCB_Overhead)/(1+ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)))) *ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100))) ) AS OffCampus_OnCampusIOs
+ from overhead_HHSNIH_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year
+left join  overhead_HHSNIH t4 on t1.partner=t4.partner and t1.year=t4.year group by t1.partner, t1.year;
+SELECT * FROM overhead_NIH_OffCampusOnCampusIOs;
+
+/* HHSNIH CURRENT(All Off-Campus Scenario) calculation... Works*/
+DROP TABLE IF EXISTS overhead_NIH_AllOffCampus;
+CREATE TABLE overhead_NIH_AllOffCampus AS 
+select t1.year as year, t1.partner as Partner,t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate,t2.University_Off_CampusOverheadRate as UniversityOffCampusRate, 
+((t1.MDCB_Overhead)/(1+ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)))) *ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)) as InternationalScenario 
+from overhead_HHSNIH_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year group by t1.partner, t1.year;
+SELECT * FROM overhead_NIH_AllOffCampus;
+/********************************************************** SQL CODES to produce the HHSNIH table ends here***************************************************
+-- ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+/********************************************************** SQL CODES to produce the HHS/HRSA starts from here***************************************************/
+drop table if exists overhead_HHSHRSA;
+create table overhead_HHSHRSA as
+SELECT   year, PARTNER,  location, orgtype, agency, sum(amount)  as amount FROM newoverheaddb.overhead_partnerdata 
+where agency="HHS/HRSA"  and location="International"  group by PARTNER, year;
+
+select * from overhead_HHSHRSA;
+
+SELECT averageretentionrate into @avgretrate from overhead_assump_applied_avge_retentionrate where FundAgency='USDOL';
+
+-- Code to produce MDCB_OverheadTotal costs for USDOL by year
+drop table if exists overhead_HHSHRSA_MDCB_Overhead;
+Create table overhead_HHSHRSA_MDCB_Overhead as
+SELECT distinct t1.year, t1.partner, t1.location, t1.orgtype, t1.agency,t1.amount,((t1.amount*IFNULL(t2.average,@avgretrate))/100 - IFNULL(t3.amount,0)-ifnull(t4.totalamount,0)) as MDCB_Overhead from overhead_HHSHRSA t1 
+left join Overhead_PartnerRetentionCalc_AvgeRetentionRate t2 on  t1.agency=t2.fundagency 
+left join overhead_temp_phlab t3 on t2.FUNDAGENCY=t3.Agency and t2.partner=t3.partner
+left join overhead_crosscuts t4 on t3.agency=t4.fundagency and t3.partner=t4.partner and t3.year=t4.year
+group by t1.year, t1.partner;
+
+Select * from overhead_HHSHRSA_MDCB_Overhead;
+
+/* HHSHRSA MDCB Overhead Total computation year wise*/
+/* This code will be carried out in pyyhon later
+drop table if exists overhead_HHSHRSA_MDCB_Overhead_Total;
+Create table overhead_HHSHRSA_MDCB_Overhead_Total as 
+select year, PARTNER, orgtype, sum(MDCB_Overhead) as MDCB_OverheadTotal from overhead_HHSHRSA_MDCB_Overhead group by year;
+
+Select * from overhead_HHSHRSA_MDCB_Overhead_Total;
+*/
+
+/* HHSHRSA CURRENT(ON-Campus Scenario) calculation*/
+select t1.year as year, t1.partner as Partner,t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate, 
+((t1.MDCB_Overhead)/(1+ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)))) *ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)) as InternationalScenario 
+from overhead_HHSHRSA_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year group by t1.year, t1.partner;
+
+/* HHSHRSA Baseline Scenario(Off-Campus Scenario/OnCampus IOs) calculation..Works*/
+select t1.year as year, t1.partner as Partner, 
+t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate,t2.University_Off_CampusOverheadRate as UniversityOffCampusRate,
+(if(t4.orgtype="University",
+((t1.MDCB_Overhead)/(1+ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)))) *ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)),
+((t1.MDCB_Overhead)/(1+ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)))) *ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100))) ) AS OffCampus_OnCampusIOs
+ from overhead_HHSHRSA_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year
+left join  overhead_HHSHRSA t4 on t1.partner=t4.partner and t1.year=t4.year group by t1.year, t1.partner;
+
+/* HHSHRSA CURRENT(All Off-Campus Scenario) calculation... Works*/
+select t1.year as year, t1.partner as Partner,t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate,t2.University_Off_CampusOverheadRate as UniversityOffCampusRate, 
+((t1.MDCB_Overhead)/(1+ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)))) *ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)) as InternationalScenario 
+from overhead_HHSHRSA_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year group by t1.year, t1.partner;
+/********************************************************** SQL CODES to produce the HHSHRSA  table ends here***************************************************
+-- ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+/********************************************************** SQL CODES to produce the HHS starts from here***************************************************/
+drop table if exists overhead_HHS;
+create table overhead_HHS as
+SELECT   year, PARTNER,  location, orgtype, agency, sum(amount)  as amount FROM newoverheaddb.overhead_partnerdata 
+where agency="HHS"  and location="International"  group by PARTNER, year;
+
+select * from overhead_HHS;
+
+SELECT averageretentionrate into @avgretrate from overhead_assump_applied_avge_retentionrate where FundAgency='USDOL';
+
+-- Code to produce MDCB_OverheadTotal costs for HHSby year
+drop table if exists overhead_HHS_MDCB_Overhead;
+Create table overhead_HHS_MDCB_Overhead as
+SELECT distinct t1.year, t1.partner, t1.location, t1.orgtype, t1.agency,t1.amount,((t1.amount*IFNULL(t2.average,@avgretrate))/100 - IFNULL(t3.amount,0)-ifnull(t4.totalamount,0)) as MDCB_Overhead from overhead_HHS t1 
+left join Overhead_PartnerRetentionCalc_AvgeRetentionRate t2 on  t1.agency=t2.fundagency 
+left join overhead_temp_phlab t3 on t2.FUNDAGENCY=t3.Agency and t2.partner=t3.partner
+left join overhead_crosscuts t4 on t3.agency=t4.fundagency and t3.partner=t4.partner and t3.year=t4.year 
+group by t1.year, t1.partner;
+
+Select * from overhead_HHS_MDCB_Overhead;
+
+
+/* HHS MDCB Overhead Total computation year wise*/
+/* This code will be carried out in pyyhon later
+drop table if exists overhead_HHS_MDCB_Overhead_Total;
+Create table overhead_HHS_MDCB_Overhead_Total as 
+select year, PARTNER, orgtype, sum(MDCB_Overhead) as MDCB_OverheadTotal from overhead_HHS_MDCB_Overhead group by year;
+
+Select * from overhead_HHS_MDCB_Overhead_Total;
+*/
+
+/* HHS CURRENT(ON-Campus Scenario) calculation*/
+select t1.year as year, t1.partner as Partner,t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate, 
+((t1.MDCB_Overhead)/(1+ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)))) *ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)) as InternationalScenario 
+from overhead_HHS_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year 
+group by t1.year, t1.partner;
+
+/* HHS Baseline Scenario(Off-Campus Scenario/OnCampus IOs) calculation..Works*/
+select t1.year as year, t1.partner as Partner, 
+t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate,t2.University_Off_CampusOverheadRate as UniversityOffCampusRate,
+(if(t4.orgtype="University",
+((t1.MDCB_Overhead)/(1+ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)))) *ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)),
+((t1.MDCB_Overhead)/(1+ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)))) *ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100))) ) AS OffCampus_OnCampusIOs
+ from overhead_HHS_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year
+left join  overhead_HHS t4 on t1.partner=t4.partner and t1.year=t4.year group by t1.year, t1.partner;
+
+
+/* HHS CURRENT(All Off-Campus Scenario) calculation... Works*/
+select t1.year as year, t1.partner as Partner,t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate,t2.University_Off_CampusOverheadRate as UniversityOffCampusRate, 
+((t1.MDCB_Overhead)/(1+ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)))) *ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)) as InternationalScenario 
+from overhead_HHS_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year group by t1.year, t1.partner;
+/********************************************************** SQL CODES to produce the HHS table ends here***************************************************
+-- ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+/********************************************************** SQL CODES to produce the State/European and Eurasian Affairs starts from here***************************************************/
+drop table if exists overhead_Eurasian;
+create table overhead_Eurasian as
+SELECT   year, PARTNER,  location, orgtype, agency, sum(amount)  as amount FROM newoverheaddb.overhead_partnerdata 
+where agency="State/European and Eurasian Affairs"  and location="International"  group by PARTNER, year;
+
+select * from overhead_Eurasian;
+
+
+SELECT averageretentionrate into @avgretrate from overhead_assump_applied_avge_retentionrate where FundAgency='State/European and Eurasian Affairs';
+
+-- Code to produce MDCB_OverheadTotal costs for Eurasian by year
+drop table if exists overhead_Eurasian_MDCB_Overhead;
+Create table overhead_Eurasian_MDCB_Overhead as
+SELECT distinct t1.year, t1.partner, t1.location, t1.orgtype, t1.agency,t1.amount,((t1.amount*IFNULL(t2.average,@avgretrate))/100 - IFNULL(t3.amount,0)-ifnull(t4.totalamount,0)) as MDCB_Overhead from overhead_Eurasian t1 
+left join Overhead_PartnerRetentionCalc_AvgeRetentionRate t2 on  t1.agency=t2.fundagency 
+left join overhead_temp_phlab t3 on t2.FUNDAGENCY=t3.Agency and t2.partner=t3.partner
+left join overhead_crosscuts t4 on t3.agency=t4.fundagency and t3.partner=t4.partner and t3.year=t4.year
+group by t1.year, t1.partner;
+
+Select * from overhead_Eurasian_MDCB_Overhead;
+
+/* Eurasian MDCB Overhead Total computation year wise*/
+/* This code will be carried out in pyyhon later
+drop table if exists overhead_Eurasian_MDCB_Overhead_Total;
+Create table overhead_Eurasian_MDCB_Overhead_Total as 
+select year, PARTNER, orgtype, sum(MDCB_Overhead) as MDCB_OverheadTotal from overhead_Eurasian_MDCB_Overhead group by year;
+
+Select * from overhead_Eurasian_MDCB_Overhead_Total;
+*/
+
+/* Eurasian CURRENT(ON-Campus Scenario) calculation*/
+select t1.year as year, t1.partner as Partner,t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate, 
+((t1.MDCB_Overhead)/(1+ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)))) *ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)) as InternationalScenario 
+from overhead_Eurasian_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year group by t1.year, t1.partner;
+
+/* Eurasian Baseline Scenario(Off-Campus Scenario/OnCampus IOs) calculation..Works*/
+select t1.year as year, t1.partner as Partner, 
+t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate,t2.University_Off_CampusOverheadRate as UniversityOffCampusRate,
+(if(t4.orgtype="University",
+((t1.MDCB_Overhead)/(1+ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)))) *ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)),
+((t1.MDCB_Overhead)/(1+ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)))) *ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100))) ) AS OffCampus_OnCampusIOs
+ from overhead_Eurasian_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year
+left join  overhead_Eurasian t4 on t1.partner=t4.partner and t1.year=t4.year group by t1.year, t1.partner;
+
+
+/* Eurasian  CURRENT(All Off-Campus Scenario) calculation... Works*/
+select t1.year as year, t1.partner as Partner,t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate,t2.University_Off_CampusOverheadRate as UniversityOffCampusRate, 
+((t1.MDCB_Overhead)/(1+ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)))) *ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)) as InternationalScenario 
+from overhead_Eurasian_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year group by t1.year, t1.partner;
+/********************************************************** SQL CODES to produce the  Eurasian table ends here***************************************************
+-- ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+/********************************************************** SQL CODES to produce the State/East Asian and Pacific Affairs starts from here***************************************************/
+drop table if exists overhead_EastPacificAffairs;
+create table overhead_EastPacificAffairs as
+SELECT   year, PARTNER,  location, orgtype, agency, sum(amount)  as amount FROM newoverheaddb.overhead_partnerdata 
+where agency="State/East Asian and Pacific Affairs"  and location="International" and year>2006  group by PARTNER, year;
+
+select * from overhead_EastPacificAffairs;
+
+SELECT averageretentionrate into @avgretrate from overhead_assump_applied_avge_retentionrate where FundAgency='USDOL';
+
+-- Code to produce MDCB_OverheadTotal costs for USDOL by year
+drop table if exists overhead_EastPacificAffairs_MDCB_Overhead;
+Create table overhead_EastPacificAffairs_MDCB_Overhead as
+SELECT distinct t1.year, t1.partner, t1.location, t1.orgtype, t1.agency,t1.amount,((t1.amount*IFNULL(t2.average,@avgretrate))/100 - IFNULL(t3.amount,0)-ifnull(t4.totalamount,0)) as MDCB_Overhead from overhead_EastPacificAffairs t1 
+left join Overhead_PartnerRetentionCalc_AvgeRetentionRate t2 on  t1.agency=t2.fundagency 
+left join overhead_temp_phlab t3 on t2.FUNDAGENCY=t3.Agency and t2.partner=t3.partner
+left join overhead_crosscuts t4 on t3.agency=t4.fundagency and t3.partner=t4.partner and t3.year=t4.year
+group by t1.year, t1.partner;
+
+Select * from overhead_EastPacificAffairs_MDCB_Overhead;
+
+/* EastPacificAffairs MDCB Overhead Total computation year wise*/
+/* This code will be carried out in pyyhon later
+drop table if exists overhead_EastPacificAffairs_MDCB_Overhead_Total;
+Create table overhead_EastPacificAffairs_MDCB_Overhead_Total as 
+select year, PARTNER, orgtype, sum(MDCB_Overhead) as MDCB_OverheadTotal from overhead_EastPacificAffairs_MDCB_Overhead group by year;
+
+Select * from overhead_EastPacificAffairs_MDCB_Overhead_Total;
+*/
+/* EastPacificAffairs CURRENT(ON-Campus Scenario) calculation*/
+select t1.year as year, t1.partner as Partner,t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate, 
+((t1.MDCB_Overhead)/(1+ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)))) *ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)) as InternationalScenario 
+from overhead_EastPacificAffairs_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year group by t1.year,t1.partner;
+
+
+/* EastPacificAffairs Baseline Scenario(Off-Campus Scenario/OnCampus IOs) calculation..Works*/
+select t1.year as year, t1.partner as Partner, 
+t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate,t2.University_Off_CampusOverheadRate as UniversityOffCampusRate,
+(if(t4.orgtype="University",
+((t1.MDCB_Overhead)/(1+ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)))) *ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)),
+((t1.MDCB_Overhead)/(1+ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)))) *ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100))) ) AS OffCampus_OnCampusIOs
+ from overhead_EastPacificAffairs_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year
+left join  overhead_EastPacificAffairs t4 on t1.partner=t4.partner and t1.year=t4.year group by t1.year,t1.partner;
+
+
+/* EastPacificAffairs CURRENT(All Off-Campus Scenario) calculation... Works*/
+select t1.year as year, t1.partner as Partner,t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate,t2.University_Off_CampusOverheadRate as UniversityOffCampusRate, 
+((t1.MDCB_Overhead)/(1+ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)))) *ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)) as InternationalScenario 
+from overhead_EastPacificAffairs_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year group by t1.year,t1.partner;
+/********************************************************** SQL CODES to produce the EastPacificAffairs table ends here***************************************************
+-- ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+/********************************************************** SQL CODES to produce the CDC starts from here***************************************************/
+drop table if exists overhead_CDC;
+create table overhead_CDC as
+SELECT   year, PARTNER,  location, orgtype, agency, sum(amount)  as amount FROM newoverheaddb.overhead_partnerdata 
+where agency="HHS/CDC"  and location="International" AND YEAR>2006  group by PARTNER, year;
+
+select * from overhead_CDC;
+
+SELECT averageretentionrate into @avgretrate from overhead_assump_applied_avge_retentionrate where FundAgency='HHS/CDC';
+
+-- Code to produce MDCB_OverheadTotal costs for USDOL by year
+drop table if exists overhead_CDC_MDCB_Overhead;
+Create table overhead_CDC_MDCB_Overhead as
+SELECT distinct t1.year, t1.partner, t1.location, t1.orgtype, t1.agency,t1.amount,((t1.amount*IFNULL(t2.average,@avgretrate))/100 - IFNULL(t3.amount,0)-ifnull(t4.totalamount,0)) as MDCB_Overhead from overhead_CDC t1 
+left join Overhead_PartnerRetentionCalc_AvgeRetentionRate t2 on  t1.agency=t2.fundagency 
+left join overhead_temp_phlab t3 on t2.FUNDAGENCY=t3.Agency and t2.partner=t3.partner
+left join overhead_crosscuts t4 on t3.agency=t4.fundagency and t3.partner=t4.partner and t3.year=t4.year
+GROUP by t1.year, t1.partner;
+
+Select * from overhead_CDC_MDCB_Overhead;
+
+/* CDC MDCB Overhead Total computation year wise*/
+/* This code will be carried out in pyyhon later
+drop table if exists overhead_CDC_MDCB_Overhead_Total;
+Create table overhead_CDC_MDCB_Overhead_Total as 
+select year, PARTNER, orgtype, sum(MDCB_Overhead) as MDCB_OverheadTotal from overhead_CDC_MDCB_Overhead group by year;
+
+Select * from overhead_CDC_MDCB_Overhead_Total;
+*/
+
+/* CDC CURRENT(ON-Campus Scenario) calculation*/
+select t1.year as year, t1.partner as Partner,t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate, 
+((t1.MDCB_Overhead)/(1+ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)))) *ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)) as InternationalScenario 
+from overhead_CDC_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year GROUP by t1.year, t1.partner;
+
+
+/* cdc Baseline Scenario(Off-Campus Scenario/OnCampus IOs) calculation..Works*/
+select t1.year as year, t1.partner as Partner, 
+t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate,t2.University_Off_CampusOverheadRate as UniversityOffCampusRate,
+(if(t4.orgtype="University",
+((t1.MDCB_Overhead)/(1+ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)))) *ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)),
+((t1.MDCB_Overhead)/(1+ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)))) *ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100))) ) AS OffCampus_OnCampusIOs
+ from overhead_CDC_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year
+left join  overhead_CDC t4 on t1.partner=t4.partner and t1.year=t4.year GROUP by t1.year, t1.partner;
+
+/* CDC CURRENT(All Off-Campus Scenario) calculation... Works*/
+select t1.year as year, t1.partner as Partner,t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate,t2.University_Off_CampusOverheadRate as UniversityOffCampusRate, 
+((t1.MDCB_Overhead)/(1+ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)))) *ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)) as InternationalScenario 
+from overhead_CDC_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year GROUP by t1.year, t1.partner;
+/********************************************************** SQL CODES to produce the CDC table ends here***************************************************
+-- ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+/********************************************************** SQL CODES to produce the State/African Affairs starts from here***************************************************/
+drop table if exists overhead_AfricanAffairs;
+create table overhead_AfricanAffairs as
+SELECT   year, PARTNER,  location, orgtype, agency, sum(amount)  as amount FROM newoverheaddb.overhead_partnerdata 
+where agency="State/African Affairs"  and location="International"  group by PARTNER, year;
+
+select * from overhead_AfricanAffairs;
+
+-- check -- It works
+
+SELECT averageretentionrate into @avgretrate from overhead_assump_applied_avge_retentionrate where FundAgency='State/African Affairs';
+
+-- Code to produce MDCB_OverheadTotal costs for State/African Affairs by year
+drop table if exists overhead_AfricanAffairs_MDCB_Overhead;
+Create table overhead_AfricanAffairs_MDCB_Overhead as
+SELECT distinct t1.year, t1.partner, t1.location, t1.orgtype, t1.agency,t1.amount,((t1.amount*IFNULL(t2.average,@avgretrate))/100 - IFNULL(t3.amount,0)-ifnull(t4.totalamount,0)) as MDCB_Overhead from overhead_AfricanAffairs t1 
+left join Overhead_PartnerRetentionCalc_AvgeRetentionRate t2 on  t1.agency=t2.fundagency 
+left join overhead_temp_phlab t3 on t2.FUNDAGENCY=t3.Agency and t2.partner=t3.partner
+left join overhead_crosscuts t4 on t3.agency=t4.fundagency and t3.partner=t4.partner and t3.year=t4.year
+order by t1.year, t1.partner;
+
+Select * from overhead_AfricanAffairs_MDCB_Overhead;
+
+/*AfricanAffairs MDCB Overhead Total computation year wise*/
+/* This code will be carried out in pyyhon later
+drop table if exists overhead_USDOL_MDCB_Overhead_Total;
+Create table overhead_USDOL_MDCB_Overhead_Total as 
+select year, PARTNER, orgtype, sum(MDCB_Overhead) as MDCB_OverheadTotal from overhead_USDOL_MDCB_Overhead group by year;
+
+Select * from overhead_USDOL_MDCB_Overhead_Total;
+*/
+
+/* AfricanAffairs CURRENT(ON-Campus Scenario) calculation*/
+select t1.year as year, t1.partner as Partner,t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate, 
+((t1.MDCB_Overhead)/(1+ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)))) *ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)) as InternationalScenario 
+from overhead_AfricanAffairs_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year;
+
+/* AfricanAffairs Baseline Scenario(Off-Campus Scenario/OnCampus IOs) calculation..Works*/
+select t1.year as year, t1.partner as Partner, 
+t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate,t2.University_Off_CampusOverheadRate as UniversityOffCampusRate,
+(if(t4.orgtype="University",
+((t1.MDCB_Overhead)/(1+ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)))) *ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)),
+((t1.MDCB_Overhead)/(1+ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)))) *ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100))) ) AS OffCampus_OnCampusIOs
+ from overhead_AfricanAffairs_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year
+left join  overhead_AfricanAffairs t4 on t1.partner=t4.partner and t1.year=t4.year;
+
+/*AfricanAffairs CURRENT(All Off-Campus Scenario) calculation... Works*/
+select t1.year as year, t1.partner as Partner,t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate,t2.University_Off_CampusOverheadRate as UniversityOffCampusRate, 
+((t1.MDCB_Overhead)/(1+ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)))) *ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)) as InternationalScenario 
+from overhead_AfricanAffairs_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year;
+/********************************************************** SQL CODES to produce the AfricanAffairs table ends here***************************************************
+-- ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+/********************************************************** SQL CODES to produce the State/Administration starts from here***************************************************/
+drop table if exists overhead_administration;
+create table overhead_administration as
+SELECT   year, PARTNER,  location, orgtype, agency, sum(amount)  as amount FROM newoverheaddb.overhead_partnerdata 
+where agency="State/Administration"  and location="International" and year>2006  group by PARTNER, year;
+
+select * from overhead_administration;
+
+SELECT averageretentionrate into @avgretrate from overhead_assump_applied_avge_retentionrate where FundAgency='State/Administration';
+
+-- Code to produce MDCB_OverheadTotal costs for USDOL by year
+drop table if exists overhead_administration_MDCB_Overhead;
+Create table overhead_administration_MDCB_Overhead as
+SELECT distinct t1.year, t1.partner, t1.location, t1.orgtype, t1.agency,t1.amount,((t1.amount*IFNULL(t2.average,@avgretrate))/100 - IFNULL(t3.amount,0)-ifnull(t4.totalamount,0)) as MDCB_Overhead from overhead_administration t1 
+left join Overhead_PartnerRetentionCalc_AvgeRetentionRate t2 on  t1.agency=t2.fundagency 
+left join overhead_temp_phlab t3 on t2.FUNDAGENCY=t3.Agency and t2.partner=t3.partner
+left join overhead_crosscuts t4 on t3.agency=t4.fundagency and t3.partner=t4.partner and t3.year=t4.year
+order by t1.year, t1.partner;
+
+Select * from overhead_administration_MDCB_Overhead;
+
+/* administration MDCB Overhead Total computation year wise*/
+/* This code will be carried out in pyyhon later
+drop table if exists overhead_administration_MDCB_Overhead_Total;
+Create table overhead_administration_MDCB_Overhead_Total as 
+select year, PARTNER, orgtype, sum(MDCB_Overhead) as MDCB_OverheadTotal from overhead_administration_MDCB_Overhead group by year;
+
+Select * from overhead_administration_MDCB_Overhead_Total;
+*/
+
+/* administration CURRENT(ON-Campus Scenario) calculation*/
+select t1.year as year, t1.partner as Partner,t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate, 
+((t1.MDCB_Overhead)/(1+ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)))) *ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)) as InternationalScenario 
+from overhead_administration_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year;
+
+/* Administration Baseline Scenario(Off-Campus Scenario/OnCampus IOs) calculation..Works*/
+select t1.year as year, t1.partner as Partner, 
+t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate,t2.University_Off_CampusOverheadRate as UniversityOffCampusRate,
+(if(t4.orgtype="University",
+((t1.MDCB_Overhead)/(1+ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)))) *ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)),
+((t1.MDCB_Overhead)/(1+ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100)))) *ifnull((t2.International_OverheadRate/100),(t3.OnCampus/100))) ) AS OffCampus_OnCampusIOs
+ from overhead_administration_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year
+left join  overhead_usdol t4 on t1.partner=t4.partner and t1.year=t4.year;
+
+/* Administration CURRENT(All Off-Campus Scenario) calculation... Works*/
+select t1.year as year, t1.partner as Partner,t1.MDCB_Overhead as MDCB_Overhead, t2.International_OverheadRate as InternationalRate,t2.University_Off_CampusOverheadRate as UniversityOffCampusRate, 
+((t1.MDCB_Overhead)/(1+ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)))) *ifnull((t2.University_Off_CampusOverheadRate/100),(t3.OffCampus/100)) as InternationalScenario 
+from overhead_administration_MDCB_Overhead t1 left join overhead_assump_baseline_scenario_overheadrates t2 on t1.year=t2.year
+left join overhead_nicrarates t3 on t1.partner=t3.partner and t1.year=t2.year;
+/********************************************************** SQL CODES to produce the Administration table ends here***************************************************
+-- ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+/********************************************************** SQL CODES to produce the BMGF(Inr) starts from here***************************************************/
+-- This excel sheet has two separate tables that needs to be produced independently. the "Totals" and "Gates Scenario" in the BMGF(Int) excel sheet are treated as two separate tables 
+
+-- BMGF_Int Totals column in excel 
+drop table if exists overhead_BMGFInt;
+create table overhead_BMGFInt as
+Select year,partner,orgtype,sum(amount) as Amount from overhead_partnerdata where LOCATION="international" and year>2006 and
+(ORGTYPE="Private Contractor" or ORGTYPE="University") group by partner,year;
+
+select * from  overhead_BMGFInt;
+
+-- BMGF_Int Gates Scenario Section
+select t1.year, t1.partner,t1.orgtype, t1.amount, t2.percentage, (((t1.amount)/(1+(t2.percentage/100)))*t2.percentage) as Gates_Scenario from overhead_BMGFInt t1 left join
+overhead_assump_gates_scenario2 t2 on t1.orgtype=t2.Scenario and t1.year=t2.year;
+
+/********************************************************** SQL CODES to produce the BMGF(NA) starts from here***************************************************/
+-- This excel sheet has two separate tables that needs to be produced independently. the "Totals" and "Gates Scenario" in the BMGF(NA) excel sheet are treated as two separate tables 
+
+-- BMGF(NA)::Totals column
+Create table overhead_BMGF_NA_totals as
+SELECT   year, PARTNER, orgtype, sum(amount) as amount  FROM overhead_partnerdata
+where partner="Not Available" and orgtype="Unknown" and year>2006 group by Year;
+
+
+select * from overhead_BMGF_NA_totals;
+-- BMGF(NA):: Gates Scenario column
+
+-- As of 08/01/2016, the following code does not work.. Need to look at it
+-- The following code is not required
+select t1.year,(((t1.amount*((t2.average)/100))/(1+t3.year)*t3.year)+((t1.amount*((t2.average)/100))/(1+t3.year)*t3.year)+((t1.amount*((t2.average)/100))/(1+t3.year)*t3.year)) as BMGF_NewScenario
+from  
+overhead_BMGF_NA_totals t1 join overhead_assump_gates_scenario2 t3 on t1.year=t3.year join
+overhead_assump_bmgf_scenario_avge t2 on  t2.scenario=t3.scenario;
+
+select t1.year,(((t1.amount*((31.15)/100))/(1+t3.year)*t3.year)+((t1.amount*((21.39)/100))/(1+t3.year)*t3.year)+((t1.amount*((12.6)/100))/(1+t3.year)*t3.year))
+ as BMGF_NewScenario from overhead_BMGF_NA_totals t1 join overhead_assump_gates_scenario2 t3 on t3.year=t1.year;
+
+-- ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+-- -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+
